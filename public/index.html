@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f8f7f3">
+<title>Tavolo · Giochi tra colleghi</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="modulepreload" href="/catalog.mjs">
+<link rel="modulepreload" href="/rooms.mjs">
+<script type="module" src="/app.mjs"></script>
+</head>
+<body>
+<header class="top"><div class="shell top-inner"><a class="brand" href="/" aria-label="Tavolo, Home"><span class="logomark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Tavolo<span class="dot">.</span></a><nav class="top-nav" aria-label="Navigazione principale"><a class="outline home-nav" href="/"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 10 9-7 9 7v10h-6v-6H9v6H3z"/></svg>Home<span id="turn-count" hidden></span></a><button class="outline" id="join-room">Entra in una stanza</button></nav></div></header>
+<main class="shell" id="app"></main>
+<dialog id="modal"></dialog>
+<div class="toast" role="status" id="toast" hidden></div>
+</body>
+</html>

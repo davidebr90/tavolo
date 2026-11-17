@@ -18,7 +18,7 @@ Apri PowerShell nella cartella estratta e avvia il server di sviluppo con Node.j
 node dev.mjs
 ```
 
-Apri [http://127.0.0.1:8788](http://127.0.0.1:8788), crea una stanza e apri l'invito in una finestra InPrivate o in un altro browser per simulare il secondo giocatore. Lo stesso profilo browser conserva il posto gi� occupato. In locale gli aggiornamenti arrivano via Server-Sent Events, con richieste periodiche come ripiego.
+Apri [http://127.0.0.1:8788](http://127.0.0.1:8788), crea una stanza e apri l’invito in una finestra InPrivate o in un altro browser per simulare il secondo giocatore. Lo stesso profilo browser conserva il posto già occupato. In locale gli aggiornamenti arrivano via Server-Sent Events, con richieste periodiche come ripiego.
 
 ## Pubblicazione su Cloudflare
 
@@ -30,13 +30,13 @@ npx wrangler dev
 npx wrangler deploy
 ```
 
-Apri l'indirizzo HTTPS restituito da Wrangler per giocare. Puoi aggiungerlo al campo **Website** del repository GitHub cos� chi visita il progetto trova subito l'app. Se necessario, scegli un nome per il Worker in `wrangler.jsonc` prima del primo deploy.
+Apri l'indirizzo HTTPS restituito da Wrangler per giocare. Puoi aggiungerlo al campo **Website** del repository GitHub così chi visita il progetto trova subito l'app. Se necessario, scegli un nome per il Worker in `wrangler.jsonc` prima del primo deploy.
 
-Worker, asset e Durable Object SQLite sono configurati nello stesso progetto. Ogni stanza � gestita da un oggetto distinto. Le mosse viaggiano via HTTPS e gli aggiornamenti arrivano via WebSocket con ibernazione. Quando il WebSocket non � raggiungibile, il browser recupera lo stato via HTTPS. La scrittura della mossa, della versione e della ricevuta per i tentativi ripetuti avviene in una singola operazione SQLite. La flotta avversaria resta nel backend, che pubblica uno stato diverso per ciascun posto.
+Worker, asset e Durable Object SQLite sono configurati nello stesso progetto. Ogni stanza è gestita da un oggetto distinto. Le mosse viaggiano via HTTPS e gli aggiornamenti arrivano via WebSocket con ibernazione. Quando il WebSocket non è raggiungibile, il browser recupera lo stato via HTTPS. La scrittura della mossa, della versione e della ricevuta per i tentativi ripetuti avviene in una singola operazione SQLite. La flotta avversaria resta nel backend, che pubblica uno stato diverso per ciascun posto.
 
 I link danno accesso alla stanza a chi li riceve. Il posto viene salvato localmente nel profilo browser usato per entrare. Per tornare in partita basta riaprire lo stesso link nello stesso profilo.
 
-Da **Home  Partite in corso** puoi controllare e riprendere pi� stanze. **Chiudi partita** chiude subito se l'altra persona non ha ancora fatto una mossa. Altrimenti la stanza resta attiva finch� l'altro giocatore accetta. Se rifiuta, si continua a giocare. Gli avvisi si aggiornano mentre Tavolo resta aperto. In locale le stanze sono salvate sotto la cartella temporanea del sistema, in Tavolo. Un riavvio di Node dalla stessa installazione permette di riprendere la partita dallo stesso link e profilo browser. Per scegliere una cartella diversa, imposta TAVOLO_ROOM_DIR prima di avviare il server.
+Da **Home → Partite in corso** puoi controllare e riprendere più stanze. **Chiudi partita** chiude subito se l’altra persona non ha ancora fatto una mossa. Altrimenti la stanza resta attiva finché l’altro giocatore accetta. Se rifiuta, si continua a giocare. Gli avvisi si aggiornano mentre Tavolo resta aperto. In locale le stanze sono salvate sotto la cartella temporanea del sistema, in Tavolo. Un riavvio di Node dalla stessa installazione permette di riprendere la partita dallo stesso link e profilo browser. Per scegliere una cartella diversa, imposta TAVOLO_ROOM_DIR prima di avviare il server.
 
 Ogni stanza mantiene gli ultimi 50 messaggi, con un massimo di 280 caratteri per messaggio. La sessione scade dopo 24 ore senza mosse, accesso del secondo giocatore o messaggi. Il server locale rimuove i file scaduti e il Worker pianifica la rimozione della riga di stato.
 
@@ -46,11 +46,11 @@ Ogni stanza mantiene gli ultimi 50 messaggi, con un massimo di 280 caratteri per
 node --test
 ```
 
-I test coprono motori, accesso ai posti, mosse concorrenti e duplicate e isolamento delle stanze. Per includere l'integrazione HTTP/SSE su un PC con loopback disponibile, esegui `$env:TAVOLO_HTTP_TEST='1'; node --test`. Il runtime Cloudflare e la rete aziendale vanno verificati dopo il deploy. Il test concorrente � funzionale e non misura la capacit� in produzione.
+I test coprono motori, accesso ai posti, mosse concorrenti e duplicate e isolamento delle stanze. Per includere l'integrazione HTTP/SSE su un PC con loopback disponibile, esegui `$env:TAVOLO_HTTP_TEST='1'; node --test`. Il runtime Cloudflare e la rete aziendale vanno verificati dopo il deploy. Il test concorrente è funzionale e non misura la capacità in produzione.
 
 ## Varianti amichevoli
 
-Scacchi riconosce le comuni posizioni di materiale insufficiente. La richiesta di patta si basa sulla posizione gi� raggiunta. Dama usa il conteggio automatico delle 40 mosse per lato di sole dame senza catture. Battaglia navale usa un colpo per turno. UNO usa una mano singola con dichiarazione automatica e validazione server del +4. Backgammon usa una partita singola senza cubo. Go usa la griglia 9x9 e conta l'area dopo due passaggi consecutivi. I gruppi morti vanno catturati sulla griglia prima di passare. Le schede Regole riportano queste scelte.
+Scacchi riconosce le comuni posizioni di materiale insufficiente. La richiesta di patta si basa sulla posizione già raggiunta. Dama usa il conteggio automatico delle 40 mosse per lato di sole dame senza catture. Battaglia navale usa un colpo per turno. UNO usa una mano singola con dichiarazione automatica e validazione server del +4. Backgammon usa una partita singola senza cubo. Go usa la griglia 9×9 e conta l'area dopo due passaggi consecutivi. I gruppi morti vanno catturati sulla griglia prima di passare. Le schede Regole riportano queste scelte.
 
 ## Struttura
 
