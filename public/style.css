@@ -504,3 +504,30 @@ dialog::backdrop { background:rgb(28 22 46 / 44%); }
     animation:tavolo-preview-ring .8s ease-in-out infinite alternate;
   }
 }
+
+.navy-setup.fleet-layout { grid-template-columns:minmax(86px,.65fr) minmax(160px,2fr) minmax(100px,.85fr); max-width:100%; gap:8px; }
+.fleet-panel { min-width:0; }
+.fleet-panel h3 { font-size:.93rem; }
+.fleet-row { display:grid; gap:3px; padding:5px; width:100%; text-align:left; font-size:.76rem; margin-block:3px; }
+.fleet-row[aria-pressed=true] { outline:2px solid var(--accent); }
+.fleet-segments { display:flex; gap:1px; }
+.fleet-segments b { display:grid; place-items:center; width:12px; height:12px; background:#8197b4; border-radius:2px; line-height:1; }
+.fleet-segments .damage,.navy-grid .hit { color:#ad132e; background:#ffe6e7; font-weight:900; }
+.sea-chart { display:grid; grid-template-columns:1.2em minmax(0,1fr); grid-template-rows:1.3em auto; font-size:.75rem; text-align:center; max-width:var(--board-size); margin:auto; }
+.sea-cols { grid-column:2; display:grid; grid-template-columns:repeat(var(--n),1fr); }
+.sea-rows { grid-row:2; display:grid; grid-template-rows:repeat(var(--n),1fr); align-items:center; }
+.sea-chart .navy-grid { grid-area:2/2; width:100%; max-width:none; }
+.navy-grid .cell { position:relative; overflow:visible; }
+.sea-strike { position:absolute; inset:0; z-index:2; pointer-events:none; }
+.sea-strike i { position:absolute; top:50%; left:50%; font-style:normal; }
+.flyover { color:#24344e; font-size:1.7em; animation:sea-flight 1.2s linear both; }
+.falling-bomb { color:#3e3c42; animation:sea-fall .45s .58s ease-in both; }
+.impact { width:85%; aspect-ratio:1; border:3px solid #167cc2; border-radius:50%; animation:sea-impact .65s 1s ease-out both; }
+.strike-hit .impact { background:#ffab37; border-color:#b62822; clip-path:polygon(50% 0,62% 32%,96% 15%,76% 46%,100% 64%,64% 68%,50% 100%,37% 69%,0 85%,25% 50%,0 25%,36% 34%); }
+@keyframes sea-flight { 0%{opacity:0;transform:translate(-350%,-160%)} 18%,80%{opacity:1} 100%{opacity:0;transform:translate(260%,-160%)} }
+@keyframes sea-fall { from{opacity:0;transform:translate(-130%,-350%)} 15%,90%{opacity:1} to{opacity:0;transform:translate(-50%,-50%)} }
+@keyframes sea-impact { from{opacity:0;transform:translate(-50%,-50%) scale(.3)} 20%{opacity:1} to{opacity:0;transform:translate(-50%,-50%) scale(1.8)} }
+@media(max-width:620px) {
+  .navy-setup.fleet-layout { grid-template-columns:minmax(70px,24%) minmax(0,1fr); }
+  .fleet-layout>div:last-child { grid-column:2; }
+}
