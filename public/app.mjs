@@ -551,7 +551,19 @@ app.addEventListener('change',event=>{
   render();
 });
 function opponentHand(g) {
-  if(state.maxPlayers>2)return '<div class="other-hands">'+g.handCounts.map((n,i)=>i===state.side?'':'<span data-other="'+i+'">'+escape(state.players[i]??'Posto '+(i+1))+' · '+n+' carte</span>').join('')+'</div>';
+  if(state.maxPlayers>2) {
+    const free=state.maxPlayers-state.players.length;
+    const hands=state.players.map((name,seat)=>{
+      if(seat===state.side)return '';
+      const count=g.handCounts[seat];
+      const current=!free&&g.result===null&&g.turn===seat;
+      const backs='<span class="mini-hand" aria-hidden="true">'+('<i class="pile-back '+g.id+'"></i>').repeat(Math.min(count,3))+'</span>';
+      return '<li class="hand-seat" data-other="'+seat+'"'+(current?' aria-current="true"':'')+'>'+backs+
+        '<span class="hand-seat-info"><strong>'+escape(name)+'</strong><small>'+count+(count===1?' carta':' carte')+(current?' · di turno':'')+'</small></span></li>';
+    }).join('');
+    const waiting=free?'<li class="hand-vacancies"><span aria-hidden="true">♧</span>'+free+(free===1?' posto libero':' posti liberi')+'</li>':'';
+    return '<ul class="other-hands" aria-label="Mani degli altri giocatori">'+hands+waiting+'</ul>';
+  }
   const count=g.opponentCount;
   const back=g.id==='scopa'?'<img src="/scopa-back.webp" alt="" width="250" height="350">':'<i></i>';
   return '<span class="opponent-hand"><span>Carte avversario: '+count+'</span>'+
