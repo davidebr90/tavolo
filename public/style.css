@@ -582,8 +582,19 @@ dialog::backdrop { background:rgb(28 22 46 / 44%); }
 .sector-number { position:absolute;top:2px;left:2px;font-size:clamp(8px,1vw,11px);line-height:1;color:#182c49; }
 .fleet-segments b { min-width:15px;width:auto;padding:0 2px;font-size:10px; }
 
-.navy-grid .cell.moving-origin:not(.ghost-ok):not(.ghost-bad) { background:#d9e6f3; opacity:.5; }
-.navy-grid .moving-origin .sector-number { opacity:.55; }
+.navy-grid .cell.moving-origin:not(.ghost-ok):not(.ghost-bad) {
+  background:#e9f3ff;
+  box-shadow:none;
+}
+.navy-grid .moving-origin:not(.ghost-ok):not(.ghost-bad)::after {
+  content:"";
+  position:absolute;
+  inset:3px;
+  border:1px dashed #879caf;
+  opacity:.65;
+  pointer-events:none;
+}
+.navy-grid .moving-origin .sector-number { visibility:hidden; }
 
 .ship-color-0 { --vessel:#74b6dd; }
 .ship-color-1 { --vessel:#eda064; }
@@ -591,7 +602,7 @@ dialog::backdrop { background:rgb(28 22 46 / 44%); }
 .ship-color-3 { --vessel:#b19bd6; }
 .ship-color-4 { --vessel:#e7c65b; }
 .ship-color-5 { --vessel:#dd91ae; }
-.navy-grid .cell.hull:not(.ghost-ok):not(.ghost-bad) { background:var(--vessel); }
+.navy-grid .cell.hull:not(.moving-origin):not(.ghost-ok):not(.ghost-bad) { background:var(--vessel); }
 .fleet-row .fleet-segments b:not(.damage) { background:var(--vessel);color:#172339; }
 .fleet-row { border-inline-start:4px solid var(--vessel); }
 
