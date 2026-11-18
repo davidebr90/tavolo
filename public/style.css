@@ -615,3 +615,6 @@ dialog::backdrop { background:rgb(28 22 46 / 44%); }
   .other-hands { display:flex;overflow-x:auto;scroll-snap-type:x proximity;padding-bottom:4px; }
   .hand-seat,.hand-vacancies { flex:0 0 auto;max-width:65%;scroll-snap-align:start; }
 }
+
+.draggable-piece:enabled { cursor:grab; }
+html.holding-piece,html.holding-piece * { cursor:grabbing !important; }
