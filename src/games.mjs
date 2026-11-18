@@ -111,7 +111,7 @@ function navalPlay(s,action,side) {
     if(s.fleets[side] || !Array.isArray(action.ships) || action.ships.length!==fleetLengths.length) invalid();
     const all=action.ships.flatMap((ship,i)=>shipCells(ship,fleetLengths[i],size));
     if(all.length!==fleetLengths.reduce((a,b)=>a+b,0) || all.includes(-1) || new Set(all).size!==all.length) invalid();
-    next.fleets[side]=action.ships.map(({at,vertical})=>({at,vertical}));
+    next.fleets[side]=action.ships.map(({at,vertical,reversed})=>reversed===true?{at,vertical,reversed:true}:{at,vertical});
     return next;
   }
   const {at}=action;
