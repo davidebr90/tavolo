@@ -1,10 +1,10 @@
 # Tavolo
 
-Scacchi, Battaglia navale, Forza 4, Reversi, Tris, Dama italiana, Scopa, UNO, Backgammon, Go, Nim e Punti e quadrati. Due giocatori per stanza, inviti con link, partite senza orologio e tab **Regole** con fonti per ogni titolo.
+Scacchi, Battaglia navale, Forza 4, Reversi, Tris, Dama italiana, Scopa, UNO, Backgammon, Go, Nim e Punti e quadrati. Stanze da 2 giocatori per i duelli, da 2 a 10 per UNO e da 4 per lo Scopone scientifico a coppie, inviti con link, partite senza orologio e tab **Regole** con fonti per ogni titolo.
 
 ## Gioca a Tavolo
 
-Crea una stanza, copia il link d'invito e mandalo alla seconda persona. In **Partite in corso** trovi le stanze, i nickname e il turno. Per giocare online serve un'istanza di Tavolo pubblicata come indicato sotto.
+Crea una stanza, copia il link d'invito e mandalo agli altri giocatori. In **Partite in corso** trovi le stanze, i nickname e il turno. Per giocare online serve un'istanza di Tavolo pubblicata come indicato sotto.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fdavidebr90%2Ftavolo)
 

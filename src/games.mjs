@@ -35,7 +35,7 @@ export function fleet(size=10,fleetLengths=lengths) {
 export function start(id,options={}) {
   if(!games.includes(id)) throw new Error('Gioco non disponibile.');
   if(id==='chess') return chessStart();
-  if(cards.includes(id)) return startCards(id);
+  if(cards.includes(id)) return startCards(id,options);
   if(strategyIds.includes(id)) return strategyStart(id);
   const s={id,turn:0,result:null,last:null};
   if(id==='naval') {
