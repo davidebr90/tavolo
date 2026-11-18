@@ -638,3 +638,22 @@ html.holding-piece,html.holding-piece * { cursor:grabbing !important; }
 .room-actions { margin-left:auto; }
 .room-actions .primary { text-decoration:none; }
 .room-actions button { font-size:.8rem; }
+
+.seat-gallery.other-hands { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr)); gap:8px;max-width:100%;overflow:visible; }
+.seat-gallery .hand-seat { position:relative;max-width:none;min-height:58px;padding:7px 9px; }
+.seat-gallery .mini-hand { flex-basis:40px;height:35px; }
+.seat-gallery .mini-hand i { width:20px;height:29px; }
+.seat-gallery .mini-hand i:nth-child(2) { left:10px; }
+.seat-gallery .mini-hand i:nth-child(3) { left:18px; }
+.seat-gallery .seat-vacant { border-style:dashed; }
+.seat-vacant .mini-hand { opacity:.34; }
+.seat-turn { font-size:.72rem; }
+.seat-gallery [aria-current=true],.players .player.current { outline:2px solid #8059d4;outline-offset:-2px; }
+@media(prefers-reduced-motion:no-preference) {
+  .seat-gallery [aria-current=true],.players .player.current { animation:seat-turn-pulse 1.8s ease-in-out infinite alternate; }
+  @keyframes seat-turn-pulse { from { box-shadow:inset 0 0 0 1px #8255ce; } to { box-shadow:inset 0 0 0 4px #a786ed; } }
+}
+@media(max-width:520px) {
+  .seat-gallery.other-hands { grid-template-columns:repeat(2,minmax(0,1fr));gap:4px; }
+  .seat-gallery .hand-seat { min-height:42px;padding:4px 6px; }
+}
