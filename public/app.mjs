@@ -455,7 +455,7 @@ function navyGrid(ships,shots,target,placing) {
   const grid='<div class="navy-grid" style="--sea-size:'+size+'">'+Array.from({length:size*size},(_,i)=>{
     const shot=fired.get(i), ship=hull.get(i), down=sunk.has(i);
     const number=ship?'<small class="sector-number">'+ship.sector+'</small>':'';
-    const tile=cell(number+(shot?(shot.hit?'×':'·'):''),[ship?'hull':'',shot?.hit?'hit':shot?'miss':'',down?'sunk':'',state.version>drawnVersion&&game().last?.at===i&&game().last.side===(target?state.side:1-state.side)?'animate':''].join(' '),
+    const tile=cell(number+(shot?(shot.hit?'×':'·'):''),[ship?'hull':'',placing&&ship&&ship.index===editingShip?'moving-origin':'',shot?.hit?'hit':shot?'miss':'',down?'sunk':'',state.version>drawnVersion&&game().last?.at===i&&game().last.side===(target?state.side:1-state.side)?'animate':''].join(' '),
       'data-naval="'+i+'"',coord(i,size)+(shot?(shot.hit?' colpito':' acqua'):ship?' nave '+(ship.index+1)+' settore '+ship.sector+(ship.sector===1?' prua':ship.sector===ship.length?' poppa':''):''),placing||(target&&acting()&&!shot));
     if(!placing||!ship)return tile;
     return '<div class="ship-sector">'+tile+'<span class="turn-ship">'+[-1,1].map(dir=>'<button data-pivot="'+i+'" data-spin="'+dir+'" aria-label="Ruota '+(dir===1?'in senso orario':'in senso antiorario')+'">'+(dir===1?'↻':'↺')+'</button>').join('')+'</span></div>';
@@ -839,7 +839,14 @@ function autoPlace() {
 function placement(at) {
   const length=sizes()[activeShip()];
   if(at===null||!length)return {cells:[],fits:false};
-  const cells=tiles({at,vertical},length), occupied=draft.flatMap((ship,i)=>i===editingShip?[]:tiles(ship,sizes()[i]));
+  const size=seaSize(), ship=draft[editingShip];
+  const offset=ship&&anchor!==null?(anchor-ship.at)/(ship.vertical?size:1):0;
+  const col=at%size-(vertical?0:offset), row=Math.floor(at/size)-(vertical?offset:0);
+  const cells=Array.from({length},(_,i)=>{
+    const x=col+(vertical?0:i), y=row+(vertical?i:0);
+    return x>=0&&x<size&&y>=0&&y<size?y*size+x:-1;
+  });
+  const occupied=draft.flatMap((other,i)=>i===editingShip?[]:tiles(other,sizes()[i]));
   return {cells,fits:cells.every(i=>i>=0&&!occupied.includes(i))};
 }
 function preview(at) {
@@ -867,17 +874,18 @@ function spinShip(pivot,dir) {
   });
   if(points.some(at=>at<0||occupied.has(at))){toast('Spazio insufficiente per questa rotazione.');return;}
   draft[index]={at:Math.min(...points),vertical:!draft[index].vertical,reversed:points[0]>points.at(-1)};
-  selectShip(index);
+  selectShip(index,pivot);
 }
-function selectShip(index) {
+function selectShip(index,pivot=draft[index]?.at??null) {
   editingShip=index;
-  anchor=draft[index]?.at??null;
+  anchor=pivot;
   vertical=draft[index]?.vertical??vertical;
   render();
 }
 function placeShip(at) {
-  if(!placement(at).fits){toast('La nave esce dalla griglia o si sovrappone.');return;}
-  draft[activeShip()]={at,vertical,reversed:!!draft[activeShip()]?.reversed};
+  const landing=placement(at);
+  if(!landing.fits){toast('La nave esce dalla griglia o si sovrappone.');return;}
+  draft[activeShip()]={at:landing.cells[0],vertical,reversed:!!draft[activeShip()]?.reversed};
   editingShip=null;
   anchor=null;
   hoverAt=null;
@@ -1133,7 +1141,7 @@ app.addEventListener('click',async e=>{
     if(game().ready.every(Boolean))send({at});
     else {
       const index=draft.findIndex((ship,i)=>ship&&tiles(ship,sizes()[i]).includes(at));
-      if(index>=0)selectShip(index);
+      if(index>=0&&index!==editingShip)selectShip(index,at);
       else if(activeShip()>=0)placeShip(at);
     }
   }
