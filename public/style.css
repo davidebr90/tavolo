@@ -564,3 +564,6 @@ dialog::backdrop { background:rgb(28 22 46 / 44%); }
 .sea-chart:has(.turn-ship) .navy-grid { overflow:visible; }
 .sector-number { position:absolute;top:2px;left:2px;font-size:clamp(8px,1vw,11px);line-height:1;color:#182c49; }
 .fleet-segments b { min-width:15px;width:auto;padding:0 2px;font-size:10px; }
+
+.navy-grid .cell.moving-origin:not(.ghost-ok):not(.ghost-bad) { background:#d9e6f3; opacity:.5; }
+.navy-grid .moving-origin .sector-number { opacity:.55; }
