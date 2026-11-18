@@ -531,3 +531,8 @@ dialog::backdrop { background:rgb(28 22 46 / 44%); }
   .navy-setup.fleet-layout { grid-template-columns:minmax(70px,24%) minmax(0,1fr); }
   .fleet-layout>div:last-child { grid-column:2; }
 }
+
+.naval-combat { display:grid; grid-template-columns:minmax(0,1fr) minmax(90px,20%); gap:8px; }
+.naval-combat .navy-switch { grid-column:1/-1; }
+.naval-combat .navy-battle { width:100%; grid-column:1; }
+.naval-combat>.fleet-panel { grid-column:2; }
