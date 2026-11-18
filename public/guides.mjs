@@ -27,7 +27,7 @@ export const guides={
     ['Vittoria','Tavolo annuncia UNO automaticamente quando resta una carta. Vince chi la finisce per primo. Si gioca una mano singola, con una carta numerica iniziale.']
   ],
   naval:[
-    ['Configura e schiera','Nella creazione puoi scegliere una griglia 8×8, 10×10 o 12×12 e da tre a sei navi. La flotta classica è 10×10 con navi da 5, 4, 3, 3 e 2 caselle. Disponi le navi in orizzontale o verticale. Possono toccarsi, senza sovrapporsi.'],
+    ['Configura e schiera','Nella creazione puoi scegliere una griglia 8×8, 10×10 o 12×12 e da tre a sei navi. Ogni nuova flotta include una nave da una casella. La configurazione predefinita è 10×10 con navi da 5, 4, 3, 2 e 1 caselle. Disponi le navi in orizzontale o verticale. Possono toccarsi, senza sovrapporsi.'],
     ['Comandi di schieramento','Scegli fra Orizzontale e Verticale, poi clicca la casella iniziale o trascina la nave. L’anteprima rossa segnala una posizione invalida. Disponi a caso sistema la flotta, Svuota libera la griglia. Usa Conferma flotta per iniziare quando entrambi avete finito.'],
     ['Attacco e vittoria','Sulla griglia Bersaglio scegli una casella ancora inesplorata. Hai un colpo per turno anche se colpisci. Nella tua flotta vedi le navi e i colpi avversari. Quando tutte le caselle di una nave sono colpite, è affondata. Vince chi affonda tutta la flotta avversaria.']
   ],
