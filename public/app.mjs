@@ -192,7 +192,7 @@ function enterDialog() {
 function nameDialog(gameId) {
   let room=code??random(12), seat=token??random(32);
   dialogForm(gameId?'Crea stanza · '+catalog[gameId].name:'Entra nella partita','Il tuo nickname',gameId?'Crea stanza':'Entra',async name=>{
-    const options=gameId==='naval'?{size:Number(modal.querySelector('#sea-size').value),ships:Number(modal.querySelector('#ship-count').value)}:undefined;
+    const options=gameId==='naval'?{size:Number(modal.querySelector('#sea-size').value),ships:Number(modal.querySelector('#ship-count').value)}:modal.querySelector('#room-players')?{players:Number(modal.querySelector('#room-players').value)}:undefined;
     const roomName=modal.querySelector('#room-name')?.value;
     const next=await api(gameId?'':'/join',gameId?{game:gameId,name,options,roomName,format:'basic'}:{name,format:'basic'},room,seat);
     code=room;token=seat;
@@ -204,6 +204,14 @@ function nameDialog(gameId) {
     live();
   },localStorage.getItem('tavolo:nickname')??'',true);
   if(gameId)modal.querySelector('.form').insertAdjacentHTML('afterbegin','<label class="room-name-label" for="room-name">Nome della stanza <input id="room-name" maxlength="48" placeholder="Facoltativo"></label>');
+  if(gameId) {
+    const counts=gameId==='scopa'?[2,4]:gameId==='uno'?Array.from({length:9},(_,i)=>i+2):[2];
+    const description=n=>gameId==='scopa'?(n===4?'Scopone scientifico · Due coppie, posti alternati. Dieci carte ciascuno, tavolo vuoto.':'Scopa classica · Tre carte ciascuno e quattro sul tavolo.'):n+' posti. La partita inizia quando tutti sono entrati.';
+    const field=counts.length===1?'<strong>2 giocatori</strong>':'<label>Giocatori da attendere <select id="room-players">'+counts.map(n=>'<option value="'+n+'">'+n+(gameId==='scopa'?(n===4?' · Scopone scientifico':' · Scopa classica'):' giocatori')+'</option>').join('')+'</select></label>';
+    modal.querySelector('.room-name-label').insertAdjacentHTML('afterend','<div class="room-capacity">'+field+'<small aria-live="polite">'+description(2)+'</small></div>');
+    const select=modal.querySelector('#room-players');
+    if(select)select.onchange=()=>modal.querySelector('.room-capacity small').textContent=description(Number(select.value));
+  }
   if(gameId==='naval') modal.querySelector('.form-row').insertAdjacentHTML('afterend','<div class="sea-options"><label for="sea-size">Griglia<select id="sea-size"><option value="8">8 × 8</option><option value="10" selected>10 × 10</option><option value="12">12 × 12</option></select></label><label for="ship-count">Navi<select id="ship-count"><option>3</option><option>4</option><option selected>5</option><option>6</option></select></label></div>');
 }
 function renameDialog() {
@@ -240,7 +248,7 @@ function lobby() {
   const dashboard=requested==='partite'||(!requested&&seats.length>0);
   const nav='<nav class="dashboard-nav" aria-label="Menu Home"><a href="/?vista=partite" '+(dashboard?'aria-current="page"':'')+'>Partite in corso</a><a href="/?vista=giochi" '+(!dashboard?'aria-current="page"':'')+'>Esplora giochi</a></nav>';
   if(dashboard) return nav+'<section class="catalog"><div class="section-head"><div><h1>Partite in corso</h1><p>Riprendi una stanza o controlla a chi tocca.</p></div><a class="primary" href="/?vista=giochi">'+icon('plus')+'Nuova partita</a></div><label class="room-filter"><input type="checkbox" id="attention-only" '+(attentionOnly?'checked':'')+'> Solo partite da seguire</label><div id="saved-rooms"></div></section>';
-  return nav+'<section class="catalog" aria-labelledby="catalog-title"><div class="section-head"><div><h1 id="catalog-title">Scegli il gioco</h1><p>Crea una stanza e invita chi vuoi sfidare.</p></div><span>2 giocatori per stanza</span></div>'+
+  return nav+'<section class="catalog" aria-labelledby="catalog-title"><div class="section-head"><div><h1 id="catalog-title">Scegli il gioco</h1><p>Crea una stanza e invita chi vuoi sfidare.</p></div><span>Da 2 a 10 giocatori secondo il gioco</span></div>'+
     '<div class="catalog-tools"><label class="game-search">'+icon('search')+'<input type="search" id="game-search" aria-label="Cerca un gioco" placeholder="Cerca un gioco…" value="'+escape(gameQuery)+'"></label><div class="game-filters" role="group" aria-label="Tipo di gioco">'+Object.entries(gameFilters).map(([key,label])=>'<button class="outline" type="button" data-filter="'+key+'" aria-pressed="'+(gameFilter===key)+'">'+label+'</button>').join('')+'</div></div>'+
     '<p class="empty-rooms" id="catalog-empty" role="status" hidden>Nessun gioco trovato.</p><div class="cards">'+Object.entries(catalog).map(([id,g])=>
     '<article class="card" data-game="'+id+'"><div class="art '+g.color+'" aria-hidden="true">'+art(id,g)+'</div><div class="card-body"><h2>'+g.name+'</h2><p>'+g.desc+'</p><div class="card-actions"><button class="primary" data-create="'+id+'" aria-label="Crea stanza · '+g.name+'">'+icon('plus')+'Crea stanza</button><button class="link" data-info="'+id+'" aria-label="Regole di '+g.name+'">'+icon('book')+'Regole</button></div></div></article>').join('')+'</div></section>';
@@ -281,7 +289,7 @@ function paintRooms() {
     const unread=s?unreadCount(key,s):0;
     const date=Number.isFinite(s?.createdAt)?new Date(s.createdAt):null;
     const created=date&&Number.isFinite(date.getTime())?'<time datetime="'+date.toISOString()+'">'+escape(new Intl.DateTimeFormat('it-IT',{dateStyle:'short',timeStyle:'short'}).format(date))+'</time>':'<span>Data non disponibile</span>';
-    const players=s?s.players.map((name,i)=>displayNickname(name,s.playerMarkup?.[i])+(i===s.side?' (tu)':'')).concat(s.players.length===1?['Posto libero']:[]).join(' · '):'';
+    const players=s?s.players.map((name,i)=>displayNickname(name,s.playerMarkup?.[i])+(i===s.side?' (tu)':'')).concat(Array(Math.max(0,(s.maxPlayers??2)-s.players.length)).fill('Posto libero')).join(' · '):'';
     return '<div class="saved-room"><a href="/?stanza='+key+'"><span><strong>'+escape(s?catalog[s.game.id].name:'Stanza')+'</strong><small>'+escape(s?.roomName?s.roomName+' · #'+key.slice(-8):'Stanza #'+key.slice(-8))+'</small>'+(s?'<small>'+players+'</small><small class="room-created">Creata il '+created+'</small>':'')+'</span><span class="room-status '+status.tone+'">'+status.label+'</span>'+(unread?'<span class="unread-pill" aria-label="'+unread+' messaggi non letti">'+icon('chat')+unread+'</span>':'')+'</a>'+
       (status.tone==='done'||unavailable.has(key)?'<button class="link" data-dismiss="'+key+'">Rimuovi</button>':
         s?.closeRequest!=null?'':'<button class="outline room-close" data-close-room="'+key+'" aria-label="'+(s?.requiresConsent?'Chiedi di chiudere la partita':'Chiudi partita')+'" '+(closingRooms.has(key)?'disabled aria-busy="true"':'')+'><span aria-hidden="true">×</span></button>')+'</div>';
@@ -382,15 +390,16 @@ function rules(id) {
 function banner(s) {
   const g=s.game;
   if(s.closed) return ['neutral','Partita chiusa'];
+  if(g.result!==null&&g.id==='scopa'&&s.maxPlayers===4)return ['neutral','Ha vinto la squadra '+(g.result+1)];
   if(g.result!==null) return ['neutral',g.result==='draw'?'Partita pari':g.result===s.side?'Hai vinto!':s.players[g.result]+' ha vinto'];
   if(!connected) return ['neutral','Riconnessione…'];
   if(pending) return ['neutral',busy?(pending.action.close?'Chiusura in invio…':'Mossa in invio…'):'Conferma da recuperare'];
-  if(s.players.length<2) return ['neutral','In attesa del secondo giocatore'];
+  if(s.players.length<(s.maxPlayers??2)) return ['neutral','In attesa · '+s.players.length+' di '+(s.maxPlayers??2)+' giocatori'];
   if(g.id==='naval'&&!g.ready.every(Boolean)) return ['neutral',g.ready[s.side]?'In attesa della flotta avversaria':'Schiera la tua flotta'];
   if(g.turn===s.side) return ['green',g.check?'Tocca a te · Sei sotto scacco':'Tocca a te'];
   return ['red','Turno di '+s.players[g.turn]];
 }
-const acting=()=>connected&&!pending&&!state.closed&&state.players.length===2&&game().turn===state.side&&game().result===null;
+const acting=()=>connected&&!pending&&!state.closed&&state.players.length===(state.maxPlayers??2)&&game().turn===state.side&&game().result===null;
 
 function cell(content,classes,attrs,label,enabled) {
   return '<button type="button" class="cell '+classes+'" '+attrs+' aria-label="'+escape(label)+'" '+(enabled?'':'disabled')+'>'+content+'</button>';
@@ -542,6 +551,7 @@ app.addEventListener('change',event=>{
   render();
 });
 function opponentHand(g) {
+  if(state.maxPlayers>2)return '<div class="other-hands">'+g.handCounts.map((n,i)=>i===state.side?'':'<span data-other="'+i+'">'+escape(state.players[i]??'Posto '+(i+1))+' · '+n+' carte</span>').join('')+'</div>';
   const count=g.opponentCount;
   const back=g.id==='scopa'?'<img src="/scopa-back.webp" alt="" width="250" height="350">':'<i></i>';
   return '<span class="opponent-hand"><span>Carte avversario: '+count+'</span>'+
@@ -563,7 +573,7 @@ function playHand(value) {
 function cardPiles(g) {
   const pile=(label,count,attr)=>'<div class="table-pile" '+attr+'><i class="pile-back '+g.id+'" '+(count?'':'hidden')+'></i><span>'+label+' <b>'+count+'</b></span></div>';
   const stock=pile('Da pescare',g.remaining,'data-stock');
-  const piles=g.id==='scopa'&&g.captureCounts?[state.side,1-state.side].map(side=>pile(side===state.side?'Le tue prese':'Prese avversarie',g.captureCounts[side],'data-pile="'+side+'"')).join(''):'';
+  const piles=g.id==='scopa'&&g.captureCounts?[state.side%2,1-state.side%2].map(side=>pile(side===state.side%2?(state.maxPlayers===4?'Prese della squadra':'Le tue prese'):'Prese avversarie',g.captureCounts[side],'data-pile="'+side+'"')).join(''):'';
   return '<div class="table-piles">'+stock+piles+'</div>';
 }
 function cardSnapshot(id) {
@@ -574,11 +584,11 @@ function cardSnapshot(id) {
 }
 function animateCards(prev,next,origins) {
   const g=next.game;
-  if(!origins||next.players.length!==2||!app.querySelector('[data-stock]'))return;
-  const old=prev?.game, opening=(!prev&&!g.last)||!!prev&&prev.players.length<2;
+  if(!origins||next.players.length!==(next.maxPlayers??2)||!app.querySelector('[data-stock]'))return;
+  const old=prev?.game, opening=(!prev&&!g.last)||!!prev&&prev.players.length<(next.maxPlayers??2);
   if(!opening&&(!prev||next.version!==prev.version+1))return;
   const rect=selector=>app.querySelector(selector)?.getBoundingClientRect();
-  const hand=[0,1].map(side=>rect(side===next.side?'.hand':'.opponent-hand'));
+  const hand=next.players.map((_,side)=>rect(side===next.side?'.hand':(next.maxPlayers>2?'[data-other="'+side+'"]':'.opponent-hand')));
   const stock=rect('[data-stock]');
   function fly(from,to,card,delay) {
     if(!from?.width||!to?.width)return;
@@ -596,14 +606,14 @@ function animateCards(prev,next,origins) {
   const played=changed&&(g.id==='scopa'||last.type==='play');
   if(played) {
     const table=rect('.card-center');
-    fly(last.side===next.side?origins.own:origins.other,table,last.card,0);
+    fly(last.side===next.side?origins.own:hand[last.side],table,last.card,0);
     if(g.id==='scopa'&&last.take?.length) {
-      const dest=rect('[data-pile="'+last.side+'"]');
+      const dest=rect('[data-pile="'+(last.side%2)+'"]');
       [last.card,...last.take].forEach((card,i)=>fly(origins.faces.get(card)??table,dest,card,350+i*65));
     }
   }
-  const counts=(game)=>next.side===0?[game.hand.length,game.opponentCount]:[game.opponentCount,game.hand.length];
-  const now=counts(g),before=opening?[0,0]:counts(old);
+  const counts=(game)=>game.handCounts??(next.side===0?[game.hand.length,game.opponentCount]:[game.opponentCount,game.hand.length]);
+  const now=counts(g),before=opening?now.map(()=>0):counts(old);
   now.forEach((n,side)=>{
     const dealt=g.id==='scopa'&&old&&old.round!==g.round?n:n-before[side]+Number(played&&last.side===side);
     for(let i=0;i<dealt;i++)fly(stock,hand[side],undefined,(played?550:0)+(2*i+side)*65);
@@ -622,7 +632,7 @@ function cardTable(g) {
   const options=scopa?g.takes[selectedCard]??[]:[];
   const table=scopa?'<div class="card-line">'+g.table.map(c=>playingCard(g.id,c)).join('')+'</div>':
     '<div class="card-line">'+(cardHints?cardCaption(playingCard(g.id,g.top),g.color):playingCard(g.id,g.top)+(g.top.startsWith('W:')?'<i class="wild-color uno-active uno-'+g.color+'" aria-label="'+unoColors[g.color]+'"></i>':''))+'</div>';
-  const info=scopa?'Smazzata '+g.round+' · Punti '+g.scores[state.side]+'–'+g.scores[1-state.side]:
+  const info=scopa?'Smazzata '+g.round+' · Punti '+g.scores[state.side%2]+'–'+g.scores[1-state.side%2]:
     (g.opponentCount===1?'UNO!':'');
   const deck=scopa?'<label class="card-deck-picker">Mazzo <select id="scopa-deck">'+
     Object.entries(scopaDecks).map(([id,name])=>'<option value="'+id+'" '+(id===scopaDeck?'selected':'')+'>'+name+'</option>').join('')+'</select></label>':'';
@@ -720,7 +730,7 @@ function room() {
     s.closeRequest==null?'':s.closeRequest===s.side?
     '<div class="closure-notice" role="status">Richiesta di chiusura inviata. In attesa di risposta.</div>':
     '<div class="closure-notice"><span role="status">'+escape(s.players[s.closeRequest])+' chiede di chiudere la partita.</span><div><button class="outline" data-action="decline-close" '+disabled+'>Rifiuta</button><button class="primary" data-action="accept-close" '+disabled+'>Accetta</button></div></div>';
-  return '<div class="room-title"><div class="room-heading"><h1>'+meta.name+'</h1><small>Giocatori in stanza · '+s.players.length+' / 2</small>'+(s.roomName?'<small>'+escape(s.roomName)+'</small>':'')+'</div>'+
+  return '<div class="room-title"><div class="room-heading"><h1>'+(g.id==='scopa'&&s.maxPlayers===4?'Scopone scientifico':meta.name)+'</h1><small>Giocatori in stanza · '+s.players.length+' / '+(s.maxPlayers??2)+'</small>'+(s.roomName?'<small>'+escape(s.roomName)+'</small>':'')+'</div>'+
     '<div class="room-tools"><div class="tabs" role="tablist" aria-label="Partita e regole"><button id="tab-play" role="tab" aria-controls="tabpanel" aria-selected="'+(tab==='play')+'" tabindex="'+(tab==='play'?0:-1)+'" data-tab="play">'+icon('board')+'Partita</button><button id="tab-rules" role="tab" aria-controls="tabpanel" aria-selected="'+(tab==='rules')+'" tabindex="'+(tab==='rules'?0:-1)+'" data-tab="rules">'+icon('book')+'Regole</button></div>'+
     '<div class="room-actions" role="group" aria-label="Comandi della partita">'+
     (hasMoveHistory?'<button class="outline" data-action="moves" aria-expanded="'+showMoves+'">'+icon('history')+'Mosse</button>':'')+
@@ -728,7 +738,7 @@ function room() {
     (!s.closed&&g.result===null&&s.closeRequest==null?'<button class="outline close-game" data-action="close-game" aria-label="Chiudi partita" title="Chiudi partita" '+disabled+'>'+icon('close')+'<span>Chiudi partita</span></button>':'')+'</div></div></div>'+
     closure+'<div class="room-layout '+(chatOpen?'with-chat ':'')+(showMoves?'with-moves':'')+'">'+(showMoves?movePanel(g):'')+
     '<div id="tabpanel" role="tabpanel" aria-labelledby="tab-'+tab+'">'+(tab==='rules'?rules(g.id):
-    '<div class="match"><div class="players">'+[0,1].map(i=>'<div class="player '+(g.turn===i&&g.result===null&&s.players[1]?'current':'')+'"><i class="seat-mark seat-'+i+'" aria-hidden="true"></i><strong title="'+escape(s.players[i])+'">'+displayNickname(s.players[i]??'Posto libero',s.playerMarkup?.[i])+(i===s.side?' (tu)':'')+'</strong><small>'+meta.players[i]+'</small></div>').join('')+'</div>'+
+    '<div class="match"><div class="players">'+Array.from({length:s.maxPlayers??2},(_,i)=>i).map(i=>'<div class="player '+(g.turn===i&&g.result===null&&s.players.length===(s.maxPlayers??2)?'current':'')+'"><i class="seat-mark seat-'+i+'" aria-hidden="true"></i><strong title="'+escape(s.players[i]??'Posto libero')+'">'+displayNickname(s.players[i]??'Posto libero',s.playerMarkup?.[i])+(i===s.side?' (tu)':'')+'</strong><small>'+(s.maxPlayers>2?(g.id==='scopa'?'Squadra '+(i%2+1):'Posto '+(i+1)):meta.players[i])+'</small></div>').join('')+'</div>'+
     '<div class="banner '+tone+'" role="status"><i></i>'+escape(wording)+'</div>'+pass+
     (g.id==='naval'?naval(g):['scopa','uno'].includes(g.id)?cardTable(g):['go','dots','nim','backgammon'].includes(g.id)?strategyBoard(g):checker(g))+
     '<div class="match-actions">'+(g.canDraw&&acting()?'<button class="outline" data-action="draw">'+icon('draw')+'Richiedi patta</button>':'')+
