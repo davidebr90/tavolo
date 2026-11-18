@@ -26,6 +26,7 @@ function chatLabel(s) {
   return icon('chat')+'Chat'+(count?'<span class="unread-pill" aria-label="'+count+' messaggi non letti">'+count+'</span>':'');
 }
 let boardDrag=null, ignoreClick=false;
+let cardGesture=null;
 let scopaDeck=localStorage.getItem('tavolo:scopa-deck');
 if(!Object.hasOwn(scopaDecks,scopaDeck))scopaDeck='napoletane';
 const deckCache=new Map();
@@ -547,7 +548,7 @@ function strategyBoard(g) {
     const v=g.points[i], piece=v>0?'light':'dark';
     const options=g.moves.some(m=>m.from===i)||(chosen!==undefined&&possible.some(m=>m.to===i));
     return cell('<small>'+(i+1)+'</small>'+(v?'<span class="bg-stack '+piece+'">● <b>'+Math.abs(v)+'</b></span>':''),
-      chosen===i?'selected':'','data-bg="'+i+'"','Punta '+(i+1)+(v?' · '+Math.abs(v)+' pedine':''),active&&options);
+      chosen===i?'selected':possible.some(m=>m.to===i)?'move-option':'','data-bg="'+i+'"','Punta '+(i+1)+(v?' · '+Math.abs(v)+' pedine':''),active&&options);
   };
   return '<div class="bg-board">'+points.map(buttonAt).join('')+'</div><div class="strategy-actions"><strong>Dadi '+(g.dice.join(' · ')||'—')+'</strong><span>Uscite '+g.off[state.side]+'–'+g.off[1-state.side]+'</span>'+
     '<button class="outline" data-bg="bar" '+(active&&g.moves.some(m=>m.from==='bar')?'':'disabled')+'>Barra '+g.bar[state.side]+'</button>'+
@@ -623,6 +624,7 @@ function room() {
     '</div></div>')+'</div>'+(chatOpen?chatPanel():'')+'</div>';
 }
 function render() {
+  cancelCardGesture();
   clearBoardDrag();
   const focused=document.activeElement;
   const previousLog=document.querySelector('#chat-messages');
@@ -782,6 +784,95 @@ function finishDrag(e) {
 }
 window.addEventListener('pointerup',finishDrag);
 window.addEventListener('pointercancel',finishDrag);
+function previewGroup(button) {
+  for(const el of app.querySelectorAll('.move-preview'))el.classList.remove('move-preview');
+  if(!button||button.disabled)return;
+  const g=game();
+  if(button.hasAttribute('data-nim')) {
+    for(let el=button;el;el=el.nextElementSibling)el.classList.add('move-preview');
+  } else if(button.closest('.four')) {
+    const column=Number(button.dataset.cell)%7;
+    for(let i=35+column;i>=0;i-=7) {
+      if(!g.board[i]) {
+        button.parentElement.querySelector('[data-cell="'+i+'"]').classList.add('move-preview');
+        break;
+      }
+    }
+  } else if(button.hasAttribute('data-take')) {
+    const take=g.takes[selectedCard]?.[Number(button.dataset.take)]??[];
+    const cards=app.querySelectorAll('.card-center .playing-card');
+    g.table.forEach((card,i)=>cards[i].classList.toggle('move-preview',take.includes(card)));
+  }
+}
+const previewSelector='[data-take],[data-nim],.four [data-cell]';
+for(const type of ['pointerover','focusin','pointerout','focusout']) {
+  app.addEventListener(type,event=>{
+    const button=event.target.closest(previewSelector);
+    if(!button||button.contains(event.relatedTarget))return;
+    previewGroup(type==='focusin'||type==='pointerover'?button:null);
+  });
+}
+function cancelCardGesture() {
+  if(!cardGesture)return;
+  const {ghost,zone,source,frame}=cardGesture;
+  cancelAnimationFrame(frame);
+  ghost?.remove();
+  zone.classList.remove('card-drop-ready','card-drop-hover');
+  source.classList.remove('card-in-flight');
+  cardGesture=null;
+}
+function overCardTable(zone,x,y) {
+  return zone.contains(document.elementFromPoint(x,y));
+}
+app.addEventListener('pointerdown',event=>{
+  const source=event.target.closest('[data-hand]:enabled');
+  if(!source||cardGesture||event.button!==0||!event.isPrimary)return;
+  const zone=source.closest('.card-table').querySelector('.card-center');
+  cardGesture={source,zone,id:event.pointerId,startX:event.clientX,startY:event.clientY,frame:0};
+});
+window.addEventListener('pointermove',event=>{
+  const d=cardGesture;
+  if(!d||event.pointerId!==d.id)return;
+  const {clientX:x,clientY:y}=event;
+  if(!d.ghost) {
+    if(Math.hypot(x-d.startX,y-d.startY)<9)return;
+    const box=d.source.getBoundingClientRect();
+    d.ghost=d.source.cloneNode(true);
+    d.ghost.removeAttribute('data-hand');
+    d.ghost.inert=true;
+    d.ghost.classList.add('flying-card');
+    d.ghost.style.width=box.width+'px';
+    d.ghost.style.height=box.height+'px';
+    document.body.append(d.ghost);
+    d.source.classList.add('card-in-flight');
+    d.zone.classList.add('card-drop-ready');
+  }
+  d.x=x;
+  d.y=y;
+  if(!d.frame)d.frame=requestAnimationFrame(()=>{
+    d.frame=0;
+    const over=overCardTable(d.zone,d.x,d.y);
+    d.zone.classList.toggle('card-drop-hover',over);
+    const box=over?d.zone.getBoundingClientRect():null;
+    const cx=box?box.left+box.width/2:d.x;
+    const cy=box?box.top+box.height/2:d.y;
+    d.ghost.style.transform='translate('+cx+'px,'+cy+'px) translate(-50%,-50%)';
+  });
+});
+window.addEventListener('pointerup',event=>{
+  const d=cardGesture;
+  if(!d||event.pointerId!==d.id)return;
+  const play=d.ghost&&overCardTable(d.zone,event.clientX,event.clientY);
+  cancelCardGesture();
+  if(!d.ghost)return;
+  if(play&&acting())d.source.click();
+  ignoreClick=true;
+  setTimeout(()=>{ignoreClick=false;},0);
+});
+window.addEventListener('pointercancel',event=>{
+  if(cardGesture?.id===event.pointerId)cancelCardGesture();
+});
+window.addEventListener('blur',cancelCardGesture);
 function clearBoardDrag() {
   if(!boardDrag)return;
   cancelAnimationFrame(boardDrag.frame);
