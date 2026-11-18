@@ -26,6 +26,7 @@ function chatLabel(s) {
   return icon('chat')+'Chat'+(count?'<span class="unread-pill" aria-label="'+count+' messaggi non letti">'+count+'</span>':'');
 }
 let boardDrag=null, ignoreClick=false;
+let cardGesture=null;
 let scopaDeck=localStorage.getItem('tavolo:scopa-deck');
 if(!Object.hasOwn(scopaDecks,scopaDeck))scopaDeck='napoletane';
 const deckCache=new Map();
@@ -110,7 +111,7 @@ async function live() {
       if(state?.version===next.version)render();
     }
     accept(next);
-    if(next.closed||next.game.result!==null)stopLive?.();
+    if(state?.closed||state?.game.result!=null)stopLive?.();
   },()=>api(),{interval:1200,onError:error=>{
     if(error.status===404) {
       stopLive?.();
@@ -547,7 +548,7 @@ function strategyBoard(g) {
     const v=g.points[i], piece=v>0?'light':'dark';
     const options=g.moves.some(m=>m.from===i)||(chosen!==undefined&&possible.some(m=>m.to===i));
     return cell('<small>'+(i+1)+'</small>'+(v?'<span class="bg-stack '+piece+'">● <b>'+Math.abs(v)+'</b></span>':''),
-      chosen===i?'selected':'','data-bg="'+i+'"','Punta '+(i+1)+(v?' · '+Math.abs(v)+' pedine':''),active&&options);
+      chosen===i?'selected':possible.some(m=>m.to===i)?'move-option':'','data-bg="'+i+'"','Punta '+(i+1)+(v?' · '+Math.abs(v)+' pedine':''),active&&options);
   };
   return '<div class="bg-board">'+points.map(buttonAt).join('')+'</div><div class="strategy-actions"><strong>Dadi '+(g.dice.join(' · ')||'—')+'</strong><span>Uscite '+g.off[state.side]+'–'+g.off[1-state.side]+'</span>'+
     '<button class="outline" data-bg="bar" '+(active&&g.moves.some(m=>m.from==='bar')?'':'disabled')+'>Barra '+g.bar[state.side]+'</button>'+
@@ -623,6 +624,8 @@ function room() {
     '</div></div>')+'</div>'+(chatOpen?chatPanel():'')+'</div>';
 }
 function render() {
+  cancelCardGesture();
+  clearBoardDrag();
   const focused=document.activeElement;
   const previousLog=document.querySelector('#chat-messages');
   const chatScroll=previousLog?.scrollTop??0;
@@ -781,44 +784,169 @@ function finishDrag(e) {
 }
 window.addEventListener('pointerup',finishDrag);
 window.addEventListener('pointercancel',finishDrag);
+function previewGroup(button) {
+  for(const el of app.querySelectorAll('.move-preview'))el.classList.remove('move-preview');
+  if(!button||button.disabled)return;
+  const g=game();
+  if(button.hasAttribute('data-nim')) {
+    for(let el=button;el;el=el.nextElementSibling)el.classList.add('move-preview');
+  } else if(button.closest('.four')) {
+    const column=Number(button.dataset.cell)%7;
+    for(let i=35+column;i>=0;i-=7) {
+      if(!g.board[i]) {
+        button.parentElement.querySelector('[data-cell="'+i+'"]').classList.add('move-preview');
+        break;
+      }
+    }
+  } else if(button.hasAttribute('data-take')) {
+    const take=g.takes[selectedCard]?.[Number(button.dataset.take)]??[];
+    const cards=app.querySelectorAll('.card-center .playing-card');
+    g.table.forEach((card,i)=>cards[i].classList.toggle('move-preview',take.includes(card)));
+  }
+}
+const previewSelector='[data-take],[data-nim],.four [data-cell]';
+for(const type of ['pointerover','focusin','pointerout','focusout']) {
+  app.addEventListener(type,event=>{
+    const button=event.target.closest(previewSelector);
+    if(!button||button.contains(event.relatedTarget))return;
+    previewGroup(type==='focusin'||type==='pointerover'?button:null);
+  });
+}
+function cancelCardGesture() {
+  if(!cardGesture)return;
+  const {ghost,zone,source,frame}=cardGesture;
+  cancelAnimationFrame(frame);
+  ghost?.remove();
+  zone.classList.remove('card-drop-ready','card-drop-hover');
+  source.classList.remove('card-in-flight');
+  cardGesture=null;
+}
+function overCardTable(zone,x,y) {
+  return zone.contains(document.elementFromPoint(x,y));
+}
+app.addEventListener('pointerdown',event=>{
+  const source=event.target.closest('[data-hand]:enabled');
+  if(!source||cardGesture||event.button!==0||!event.isPrimary)return;
+  const zone=source.closest('.card-table').querySelector('.card-center');
+  cardGesture={source,zone,id:event.pointerId,startX:event.clientX,startY:event.clientY,frame:0};
+});
+window.addEventListener('pointermove',event=>{
+  const d=cardGesture;
+  if(!d||event.pointerId!==d.id)return;
+  const {clientX:x,clientY:y}=event;
+  if(!d.ghost) {
+    if(Math.hypot(x-d.startX,y-d.startY)<9)return;
+    const box=d.source.getBoundingClientRect();
+    d.ghost=d.source.cloneNode(true);
+    d.ghost.removeAttribute('data-hand');
+    d.ghost.inert=true;
+    d.ghost.classList.add('flying-card');
+    d.ghost.style.width=box.width+'px';
+    d.ghost.style.height=box.height+'px';
+    document.body.append(d.ghost);
+    d.source.classList.add('card-in-flight');
+    d.zone.classList.add('card-drop-ready');
+  }
+  d.x=x;
+  d.y=y;
+  if(!d.frame)d.frame=requestAnimationFrame(()=>{
+    d.frame=0;
+    const over=overCardTable(d.zone,d.x,d.y);
+    d.zone.classList.toggle('card-drop-hover',over);
+    const box=over?d.zone.getBoundingClientRect():null;
+    const cx=box?box.left+box.width/2:d.x;
+    const cy=box?box.top+box.height/2:d.y;
+    d.ghost.style.transform='translate('+cx+'px,'+cy+'px) translate(-50%,-50%)';
+  });
+});
+window.addEventListener('pointerup',event=>{
+  const d=cardGesture;
+  if(!d||event.pointerId!==d.id)return;
+  const play=d.ghost&&overCardTable(d.zone,event.clientX,event.clientY);
+  cancelCardGesture();
+  if(!d.ghost)return;
+  if(play&&acting())d.source.click();
+  ignoreClick=true;
+  setTimeout(()=>{ignoreClick=false;},0);
+});
+window.addEventListener('pointercancel',event=>{
+  if(cardGesture?.id===event.pointerId)cancelCardGesture();
+});
+window.addEventListener('blur',cancelCardGesture);
+function clearBoardDrag() {
+  if(!boardDrag)return;
+  cancelAnimationFrame(boardDrag.frame);
+  boardDrag.marker?.remove();
+  boardDrag.source.classList.remove('drag-origin');
+  boardDrag.target?.classList.remove('drop-preview');
+  for(const cell of boardDrag.targets)cell.classList.remove('drop-option');
+  boardDrag=null;
+}
 app.addEventListener('pointerdown',e=>{
   const source=e.target.closest('.chess .cell:enabled,.dama .cell:enabled');
-  if(!source||e.button!==0||!source.firstElementChild||!acting())return;
+  if(boardDrag||!source||e.button!==0||!source.firstElementChild||!acting())return;
   const from=Number(source.dataset.cell), g=game();
-  if(!g.moves.some(m=>(g.id==='chess'?m.from:m.path[0])===from))return;
-  boardDrag={pointer:e.pointerId,from,x:e.clientX,y:e.clientY,source,marker:null};
-});
-window.addEventListener('pointermove',e=>{
-  if(boardDrag?.pointer!==e.pointerId)return;
-  if(!boardDrag.marker) {
-    if(Math.hypot(e.clientX-boardDrag.x,e.clientY-boardDrag.y)<7)return;
-    const marker=document.createElement('div');
-    marker.className='piece-ghost '+game().id;
-    marker.append(boardDrag.source.firstElementChild.cloneNode(true));
-    document.body.append(marker);
-    boardDrag.marker=marker;
+  const destinations=new Set();
+  for(const move of g.moves) {
+    const path=g.id==='chess'?[move.from,move.to]:move.path;
+    if(path[0]===from)destinations.add(path[1]);
   }
-  boardDrag.marker.style.transform='translate('+e.clientX+'px,'+e.clientY+'px) translate(-50%,-50%)';
+  if(!destinations.size)return;
+  const board=source.closest('.chess,.dama');
+  const targets=new Set([...board.querySelectorAll('[data-cell]')].filter(cell=>destinations.has(Number(cell.dataset.cell))));
+  boardDrag={pointer:e.pointerId,from,x:e.clientX,y:e.clientY,source,targets,marker:null,frame:0};
+});
+function dragTarget(x,y) {
+  const cell=document.elementFromPoint(x,y)?.closest('[data-cell]');
+  return boardDrag.targets.has(cell)?cell:null;
+}
+function paintBoardDrag() {
+  const d=boardDrag;
+  d.frame=0;
+  const target=dragTarget(d.clientX,d.clientY);
+  if(target!==d.target) {
+    d.target?.classList.remove('drop-preview');
+    target?.classList.add('drop-preview');
+    d.target=target;
+  }
+  const box=target?.getBoundingClientRect();
+  const x=box?box.left+box.width/2:d.clientX;
+  const y=box?box.top+box.height/2:d.clientY;
+  d.marker.style.transform='translate('+x+'px,'+y+'px) translate(-50%,-50%)';
+}
+window.addEventListener('pointermove',e=>{
+  const d=boardDrag;
+  if(d?.pointer!==e.pointerId)return;
+  if(!d.marker) {
+    if(Math.hypot(e.clientX-d.x,e.clientY-d.y)<7)return;
+    d.marker=document.createElement('div');
+    d.marker.className='piece-ghost '+game().id;
+    d.marker.style.width=d.source.getBoundingClientRect().width+'px';
+    d.marker.append(d.source.firstElementChild.cloneNode(true));
+    document.body.append(d.marker);
+    d.source.classList.add('drag-origin');
+    for(const cell of d.targets)cell.classList.add('drop-option');
+  }
+  d.clientX=e.clientX;
+  d.clientY=e.clientY;
+  if(!d.frame)d.frame=requestAnimationFrame(paintBoardDrag);
 });
 function finishBoardDrag(e) {
   if(boardDrag?.pointer!==e.pointerId)return;
   const {marker,from}=boardDrag;
-  boardDrag=null;
+  const target=marker&&e.type==='pointerup'&&dragTarget(e.clientX,e.clientY);
+  clearBoardDrag();
   if(!marker)return;
-  marker.remove();
   ignoreClick=true;
   setTimeout(()=>{ignoreClick=false;},0);
-  if(e.type==='pointercancel'||!acting())return;
-  const target=document.elementFromPoint(e.clientX,e.clientY)?.closest('.chess [data-cell],.dama [data-cell]');
-  if(!target)return;
-  const to=Number(target.dataset.cell), g=game();
-  if(!g.moves.some(m=>g.id==='chess'?m.from===from&&m.to===to:m.path[0]===from&&m.path[1]===to))return;
-  promotionTarget=to;
+  if(!target||!acting())return;
+  promotionTarget=Number(target.dataset.cell);
   prefix=[from];
-  playCell(to);
+  playCell(promotionTarget);
 }
 window.addEventListener('pointerup',finishBoardDrag);
 window.addEventListener('pointercancel',finishBoardDrag);
+window.addEventListener('blur',clearBoardDrag);
 app.addEventListener('click',async e=>{
   if(ignoreClick)return;
   const b=e.target.closest('button');if(!b)return;

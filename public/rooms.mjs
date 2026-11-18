@@ -37,15 +37,22 @@ export function roomTransport(config) {
 }
 export function watchRoom(room,transport,receive,fetchState,{interval=5000,onError=()=>{}}={}) {
   let socket, timer, retry=500, closed=false, handshake, reconnect;
+  let polling=false;
   async function poll() {
-    if(closed)return;
+    if(closed||ready||polling)return;
+    polling=true;
     try {
       const state=await fetchState();
-      if(!closed)receive(state);
+      if(!closed&&!ready)receive(state);
     } catch(error) {
-      if(!closed)onError(error);
+      if(!closed&&!ready)onError(error);
+    } finally {
+      polling=false;
     }
-    if(!closed&&!ready)timer=setTimeout(poll,interval);
+    if(!closed&&!ready) {
+      clearTimeout(timer);
+      timer=setTimeout(poll,interval);
+    }
   }
   let ready=false;
   if(transport==='poll') {
@@ -60,6 +67,7 @@ export function watchRoom(room,transport,receive,fetchState,{interval=5000,onErr
     handshake=setTimeout(()=>socket.close(),8000);
     socket.onopen=()=>socket.send(room.token);
     socket.onmessage=e=>{
+      if(closed)return;
       clearTimeout(handshake);
       ready=true;
       retry=500;
