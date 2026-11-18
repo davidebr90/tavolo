@@ -455,7 +455,7 @@ function navyGrid(ships,shots,target,placing) {
   const grid='<div class="navy-grid" style="--sea-size:'+size+'">'+Array.from({length:size*size},(_,i)=>{
     const shot=fired.get(i), ship=hull.get(i), down=sunk.has(i);
     const number=ship?'<small class="sector-number">'+ship.sector+'</small>':'';
-    const tile=cell(number+(shot?(shot.hit?'×':'·'):''),[ship?'hull':'',placing&&ship&&ship.index===editingShip?'moving-origin':'',shot?.hit?'hit':shot?'miss':'',down?'sunk':'',state.version>drawnVersion&&game().last?.at===i&&game().last.side===(target?state.side:1-state.side)?'animate':''].join(' '),
+    const tile=cell(number+(shot?(shot.hit?'×':'·'):''),[ship?'hull ship-color-'+ship.index:'',placing&&ship&&ship.index===editingShip?'moving-origin':'',shot?.hit?'hit':shot?'miss':'',down?'sunk':'',state.version>drawnVersion&&game().last?.at===i&&game().last.side===(target?state.side:1-state.side)?'animate':''].join(' '),
       'data-naval="'+i+'"',coord(i,size)+(shot?(shot.hit?' colpito':' acqua'):ship?' nave '+(ship.index+1)+' settore '+ship.sector+(ship.sector===1?' prua':ship.sector===ship.length?' poppa':''):''),placing||(target&&acting()&&!shot));
     if(!placing||!ship)return tile;
     return '<div class="ship-sector">'+tile+'<span class="turn-ship">'+[-1,1].map(dir=>'<button data-pivot="'+i+'" data-spin="'+dir+'" aria-label="Ruota '+(dir===1?'in senso orario':'in senso antiorario')+'">'+(dir===1?'↻':'↺')+'</button>').join('')+'</span></div>';
@@ -483,7 +483,7 @@ function fleetPanel(ships,shots,reserve,editable) {
     const cells=ship?shipSectors(ship,length):Array(length).fill(-1);
     const label='Nave '+(i+1)+' · '+length+' caselle'+(ship?' · '+coord(ship.at,seaSize()):'');
     const body='<span>'+label+'</span><span class="fleet-segments">'+cells.map((at,i)=>'<b class="'+(hits.has(at)?'damage':'')+'" title="Settore '+(i+1)+(i===0?' · prua':i===length-1?' · poppa':'')+'">'+(i+1)+(hits.has(at)?'×':'')+'</b>').join('')+'</span>';
-    return editable?'<button class="outline fleet-row" data-ship="'+i+'" aria-pressed="'+(activeShip()===i)+'">'+body+'</button>':'<div class="fleet-row">'+body+'</div>';
+    return editable?'<button class="outline fleet-row ship-color-'+i+'" data-ship="'+i+'" aria-pressed="'+(activeShip()===i)+'">'+body+'</button>':'<div class="fleet-row ship-color-'+i+'">'+body+'</div>';
   }).join('');
   return '<aside class="fleet-panel"><h3>'+(reserve?'Da posizionare':'La tua squadra navale')+'</h3>'+ (rows||(reserve?'Tutte posizionate':'Nessuna nave posizionata'))+'</aside>';
 }
