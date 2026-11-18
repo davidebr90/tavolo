@@ -538,7 +538,7 @@ function cardFace(id,value) {
     return {face:unoValues[rank]??rank,label:(unoValues[rank]??rank)+' '+unoColors[color],style:'uno-'+color};
   }
   const suit=Math.floor(value/10), rank=value%10+1;
-  return {face:(['','A','2','3','4','5','6','7','F','C','R'][rank])+' '+['◉','♜','∥','♠'][suit],label:rank+' di '+['denari','coppe','bastoni','spade'][suit],style:'scopa-'+suit};
+  return {face:(['','A','2','3','4','5','6','7','F','C','R'][rank])+' '+['◉','♜','∥','♠'][suit],label:({1:'Asso (1)',8:'Fante (8)',9:'Cavallo (9)',10:'Re (10)'}[rank]??rank)+' di '+['denari','coppe','bastoni','spade'][suit],style:'scopa-'+suit};
 }
 function playingCard(id,value,attribute='',enabled=false,selected=false) {
   const {label,style}=cardFace(id,value);
@@ -599,10 +599,22 @@ function playHand(value) {
       showModal('<h2>Scegli il colore</h2><div class="promotion">'+Object.entries(unoColors).filter(([color])=>color!=='W').map(([color,name])=>'<button class="uno-active uno-'+color+'" data-uno-color="'+color+'">'+name+'</button>').join('')+'</div>');
     } else send({card:value});
   }
+function scopaFace(card) {
+  const face=playingCard('scopa',card);
+  return cardHints?cardCaption(face,cardFace('scopa',card).label):face;
+}
 function cardPiles(g) {
   const pile=(label,count,attr)=>'<div class="table-pile" '+attr+'><i class="pile-back '+g.id+'" '+(count?'':'hidden')+'></i><span>'+label+' <b>'+count+'</b></span></div>';
   const stock=pile('Da pescare',g.remaining,'data-stock');
-  const piles=g.id==='scopa'&&g.captureCounts?[state.side%2,1-state.side%2].map(side=>pile(side===state.side%2?(state.maxPlayers===4?'Prese della squadra':'Le tue prese'):'Prese avversarie',g.captureCounts[side],'data-pile="'+side+'"')).join(''):'';
+  const piles=g.id==='scopa'&&g.captureCounts?[state.side%2,1-state.side%2].map(team=>{
+    const label=team!==state.side%2?'Prese avversarie':state.maxPlayers===4?'Prese della squadra':'Le tue prese';
+    const cards=g.captured?.[team]??[], sweeps=g.sweepCards?.[team]??[];
+    const markers=sweeps.slice(-3).map((card,i)=>'<i style="--i:'+i+'">'+playingCard('scopa',card)+'</i>').join('');
+    const gallery=cards.map(card=>'<span class="taken-face">'+scopaFace(card)+(sweeps.includes(card)?'<b>Scopa</b>':'')+'</span>').join('');
+    return '<div class="capture-stack" data-pile="'+team+'"><button class="table-pile pile-inspect" type="button" aria-label="'+label+', '+cards.length+' carte. Mostra le prese">'+
+      '<span class="capture-art"><i class="pile-back scopa" '+(cards.length?'':'hidden')+'></i>'+markers+'</span><span>'+label+' <b>'+g.captureCounts[team]+'</b><small>Punti sicuri · '+(g.securedPoints?.[team]??g.sweeps[team])+'</small></span></button>'+
+      '<section class="capture-preview" tabindex="0" aria-label="'+label+'"><strong>'+label+' · Scope '+g.sweeps[team]+'</strong><div>'+ (gallery||'Nessuna presa')+'</div></section></div>';
+  }).join(''):'';
   return '<div class="table-piles">'+stock+piles+'</div>';
 }
 function cardSnapshot(id) {
@@ -650,8 +662,8 @@ function animateCards(prev,next,origins) {
 }
 
 
-function cardCaption(face,color) {
-  return '<span class="caption-card">'+face+'<small>'+unoColors[color]+'</small></span>';
+function cardCaption(face,label) {
+  return '<span class="caption-card">'+face+'<small>'+label+'</small></span>';
 }
 function cardTable(g) {
   const scopa=g.id==='scopa', deckId=scopa?scopaDeck:'uno';
@@ -659,14 +671,14 @@ function cardTable(g) {
   if(!ready)ensureDeck(deckId);
   const active=ready&&acting();
   const options=scopa?g.takes[selectedCard]??[]:[];
-  const table=scopa?'<div class="card-line">'+g.table.map(c=>playingCard(g.id,c)).join('')+'</div>':
-    '<div class="card-line">'+(cardHints?cardCaption(playingCard(g.id,g.top),g.color):playingCard(g.id,g.top)+(g.top.startsWith('W:')?'<i class="wild-color uno-active uno-'+g.color+'" aria-label="'+unoColors[g.color]+'"></i>':''))+'</div>';
+  const table=scopa?'<div class="card-line">'+g.table.map(c=>scopaFace(c)).join('')+'</div>':
+    '<div class="card-line">'+(cardHints?cardCaption(playingCard(g.id,g.top),unoColors[g.color]):playingCard(g.id,g.top)+(g.top.startsWith('W:')?'<i class="wild-color uno-active uno-'+g.color+'" aria-label="'+unoColors[g.color]+'"></i>':''))+'</div>';
   const info=scopa?'Smazzata '+g.round+' · Punti '+g.scores[state.side%2]+'–'+g.scores[1-state.side%2]:
     (g.opponentCount===1?'UNO!':'');
   const deck=scopa?'<label class="card-deck-picker">Mazzo <select id="scopa-deck">'+
     Object.entries(scopaDecks).map(([id,name])=>'<option value="'+id+'" '+(id===scopaDeck?'selected':'')+'>'+name+'</option>').join('')+'</select></label>':'';
   return '<div class="card-table table-'+g.id+'"'+(scopa?' data-deck="'+scopaDeck+'"':'')+'><div class="card-help"><button class="outline" data-action="card-hints" title="Indicazioni di accessibilità" aria-label="Indicazioni di accessibilità" aria-pressed="'+cardHints+'">♿</button>'+(cardHints?'<small>Doppio clic o trascina sul tavolo. Da tastiera, premi Invio.</small>':'')+'</div><div class="card-table-meta"><span>'+info+'</span>'+opponentHand(g)+deck+'</div>'+cardPiles(g)+'<div class="card-center"><h3>'+(scopa?'Sul tavolo':'Carta in cima')+'</h3>'+table+'</div>'+
-    '<h3>La tua mano</h3><div class="card-line hand">'+g.hand.map(c=>{const face=playingCard(g.id,c,'data-hand="'+c+'"',active&&(scopa||g.playable.includes(c)),selectedCard===c);return cardHints&&!scopa?cardCaption(face,c[0]):face;}).join('')+'</div>'+
+    '<h3>La tua mano</h3><div class="card-line hand">'+g.hand.map(c=>{const face=playingCard(g.id,c,'data-hand="'+c+'"',active&&(scopa||g.playable.includes(c)),selectedCard===c);return cardHints?cardCaption(face,scopa?cardFace(g.id,c).label:unoColors[c[0]]):face;}).join('')+'</div>'+
     '<div class="card-moves">'+(scopa?options.map((take,i)=>'<button class="primary" data-take="'+i+'">'+(take.length?'Prendi '+take.map(c=>cardFace(g.id,c).label).join(' + '):'Lascia sul tavolo')+'</button>').join(''):
     (active?'<button class="outline" data-action="'+(g.drawn?'uno-pass':'uno-draw')+'">'+(g.drawn?'Passa':'Pesca')+'</button>':''))+'</div></div>';
 }
