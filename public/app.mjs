@@ -89,12 +89,15 @@ function accept(next) {
     return;
   }
   if((state?.chatVersion??0)>(next.chatVersion??0)) next={...next,chat:state.chat,chatVersion:state.chatVersion};
+  const incoming=next.game.id==='naval'&&state?.game.id==='naval'&&next.game.incoming.length>state.game.incoming.length?next.game.incoming.at(-1):null;
+  if(incoming)navalView='own-fleet';
   notifyClosure(state,next);
   state=next;
   prefix=[];
   selectedCard=null;
   seenRooms.set(code,next);
   render();
+  if(incoming)showStrike(incoming);
 }
 function setConnected(value) {
   if(connected===value)return;
@@ -441,29 +444,54 @@ function navyGrid(ships,shots,target,placing) {
   const hull=new Set((ships??[]).flatMap((ship,i)=>tiles(ship,sizes()[i])));
   const fired=new Map(shots.map(m=>[m.at,m]));
   const sunk=new Set(shots.flatMap(m=>m.sunk??[]));
-  return '<div class="navy-grid" style="--sea-size:'+size+'">'+Array.from({length:size*size},(_,i)=>{
+  const grid='<div class="navy-grid" style="--sea-size:'+size+'">'+Array.from({length:size*size},(_,i)=>{
     const shot=fired.get(i), ship=hull.has(i), down=sunk.has(i);
-    return cell(shot?(shot.hit?'✦':'·'):'',[ship?'hull':'',shot?.hit?'hit':shot?'miss':'',down?'sunk':'',state.version>drawnVersion&&game().last?.at===i&&game().last.side===(target?state.side:1-state.side)?'animate':''].join(' '),
+    return cell(shot?(shot.hit?'×':'·'):'',[ship?'hull':'',shot?.hit?'hit':shot?'miss':'',down?'sunk':'',state.version>drawnVersion&&game().last?.at===i&&game().last.side===(target?state.side:1-state.side)?'animate':''].join(' '),
       'data-naval="'+i+'"',coord(i,size)+(shot?(shot.hit?' colpito':' acqua'):ship?' nave':''),placing||(target&&acting()&&!shot));
   }).join('')+'</div>';
+  return '<div class="sea-chart" style="--n:'+size+'"><div class="sea-cols">'+Array.from({length:size},(_,i)=>'<span>'+String.fromCharCode(65+i)+'</span>').join('')+'</div><div class="sea-rows">'+Array.from({length:size},(_,i)=>'<span>'+(i+1)+'</span>').join('')+'</div>'+grid+'</div>';
+}
+function showStrike(shot) {
+  const target=app.querySelector('.own-grid [data-naval="'+shot.at+'"]');
+  if(!target||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const fx=document.createElement('span');
+  fx.className='sea-strike '+(shot.hit?'strike-hit':'strike-water');
+  fx.setAttribute('aria-hidden','true');
+  fx.innerHTML='<i class="flyover">✈</i><i class="falling-bomb">●</i><i class="impact"></i>';
+  target.append(fx);
+  setTimeout(()=>fx.remove(),1800);
+}
+function activeShip() {
+  return editingShip??sizes().findIndex((_,i)=>!draft[i]);
+}
+function fleetPanel(ships,shots,reserve,editable) {
+  const hits=new Set(shots.filter(shot=>shot.hit).map(shot=>shot.at));
+  const rows=sizes().map((length,i)=>{
+    const ship=ships?.[i];
+    if(reserve?!!ship:!ship)return '';
+    const cells=ship?tiles(ship,length):Array(length).fill(-1);
+    const label='Nave '+(i+1)+' · '+length+' caselle'+(ship?' · '+coord(ship.at,seaSize()):'');
+    const body='<span>'+label+'</span><span class="fleet-segments">'+cells.map(at=>hits.has(at)?'<b class="damage" aria-label="Colpito">×</b>':'<b></b>').join('')+'</span>';
+    return editable?'<button class="outline fleet-row" data-ship="'+i+'" aria-pressed="'+(activeShip()===i)+'">'+body+'</button>':'<div class="fleet-row">'+body+'</div>';
+  }).join('');
+  return '<aside class="fleet-panel"><h3>'+(reserve?'Da posizionare':'La tua squadra navale')+'</h3>'+ (rows||(reserve?'Tutte posizionate':'Nessuna nave posizionata'))+'</aside>';
 }
 function naval(g) {
-  const placement=!g.ready.every(Boolean);
-  if(placement) {
+  if(!g.ready.every(Boolean)) {
     const editable=connected&&!state.closed&&!g.ready[state.side]&&!pending;
-    const length=sizes()[editingShip??draft.length];
-    const canConfirm=editable&&state.players.length===2&&draft.length===sizes().length&&anchor===null;
-    const controls='<div class="fleet-tools"><h3>Navi schierate '+draft.length+' / '+sizes().length+'</h3>'+
-      '<p>Tocca una casella per vedere l’ingombro. Tocca una nave già posata per modificarla.</p>'+
-      (length?'<div class="fleet-actions"><button class="outline ship-drag" data-drag-ship>Trascina nave da '+length+'</button>'+
-      '<button class="outline" data-action="rotate">Ruota nave · '+(vertical?'↕ verticale':'↔ orizzontale')+'</button></div>':'')+
-      (anchor!==null?'<div class="fleet-actions"><button class="primary" data-action="apply-ship" '+(placement(anchor).fits?'':'disabled')+'>'+(editingShip===null?'Posiziona qui':'Salva posizione')+'</button><button class="link" data-action="cancel-ship">Annulla</button></div>':'')+
-      '<div class="fleet-actions"><button class="outline" data-action="random">Disponi a caso</button><button class="link" data-action="reset">Svuota</button><button class="primary" data-action="fleet" '+(canConfirm?'':'disabled')+'>Conferma flotta</button></div>'+
-      (state.players.length<2?'<p>Puoi preparare la flotta ora e confermarla quando entra il secondo giocatore.</p>':'')+'</div>';
-    return '<div class="navy-setup"><div><h3>La tua flotta · '+g.size+' × '+g.size+'</h3>'+navyGrid(g.ready[state.side]?g.mine:draft,[],false,editable)+'</div>'+
-      (editable?controls:g.ready[state.side]?'<p>Flotta confermata.</p>':'')+'</div>';
+    const ships=g.ready[state.side]?g.mine:draft;
+    const selected=draft[activeShip()];
+    const complete=sizes().every((_,i)=>ships?.[i]);
+    const controls=editable?'<div class="fleet-actions">'+
+      (activeShip()>=0?'<button class="outline ship-drag" data-drag-ship>Trascina nave</button><button class="outline" data-action="rotate">Ruota nave · '+(vertical?'↕':'↔')+'</button>':'')+
+      (selected?'<button class="outline" data-action="remove-ship">Rimuovi nave</button>':'')+
+      '<button class="outline" data-action="random">Disponi a caso</button><button class="link" data-action="reset">Svuota</button>'+
+      '<button class="primary" data-action="fleet" '+(complete&&state.players.length===2?'':'disabled')+'>Conferma flotta</button></div>':'';
+    return '<div class="navy-setup fleet-layout">'+fleetPanel(ships,[],true,editable)+'<div><h3>La tua flotta</h3>'+navyGrid(ships,[],false,editable)+'</div><div>'+
+      fleetPanel(ships,[],false,editable)+controls+'</div></div>'+
+      (editable?'<p>Scegli una nave a sinistra e clicca sulla griglia per posarla. Seleziona una nave posata per spostarla, ruotarla o rimuoverla.</p>':'<p>Flotta confermata.</p>');
   }
-  return '<div class="navy-switch" role="group" aria-label="Griglia visibile"><button class="outline" data-action="target" aria-pressed="'+(navalView==='target')+'">Bersaglio</button><button class="outline" data-action="own-fleet" aria-pressed="'+(navalView==='own-fleet')+'">La tua flotta</button></div><div class="navy-battle show-'+navalView+'"><div class="target-grid"><h3>Bersaglio</h3>'+navyGrid(null,g.outgoing,true,false)+'</div><div class="own-grid"><h3>La tua flotta</h3>'+navyGrid(g.mine,g.incoming,false,false)+'</div></div>';
+  return '<div class="navy-switch" role="group" aria-label="Griglia visibile"><button class="outline" data-action="target" aria-pressed="'+(navalView==='target')+'">Bersaglio</button><button class="outline" data-action="own-fleet" aria-pressed="'+(navalView==='own-fleet')+'">La tua flotta</button></div><div class="navy-battle show-'+navalView+'"><div class="target-grid"><h3>Bersaglio</h3>'+navyGrid(null,g.outgoing,true,false)+'</div><div class="own-grid"><h3>La tua flotta</h3>'+navyGrid(g.mine,g.incoming,false,false)+'</div></div>'+fleetPanel(g.mine,g.incoming,false,false);
 }
 const unoColors={R:'Rosso',B:'Blu',G:'Verde',Y:'Giallo',W:'Jolly'};
 const unoValues={skip:'Salta',reverse:'Inverti',two:'+2',four:'+4',wild:'Jolly'};
@@ -730,7 +758,7 @@ function autoPlace() {
   render();
 }
 function placement(at) {
-  const length=sizes()[editingShip??draft.length];
+  const length=sizes()[activeShip()];
   if(at===null||!length)return {cells:[],fits:false};
   const cells=tiles({at,vertical},length), occupied=draft.flatMap((ship,i)=>i===editingShip?[]:tiles(ship,sizes()[i]));
   return {cells,fits:cells.every(i=>i>=0&&!occupied.includes(i))};
@@ -745,9 +773,15 @@ function preview(at) {
     el.classList.toggle('ghost-bad',covered&&!fits);
   }
 }
+function selectShip(index) {
+  editingShip=index;
+  anchor=draft[index]?.at??null;
+  vertical=draft[index]?.vertical??vertical;
+  render();
+}
 function placeShip(at) {
   if(!placement(at).fits){toast('La nave esce dalla griglia o si sovrappone.');return;}
-  draft[editingShip??draft.length]={at,vertical};
+  draft[activeShip()]={at,vertical};
   editingShip=null;
   anchor=null;
   hoverAt=null;
@@ -771,7 +805,7 @@ app.addEventListener('pointerdown',e=>{
   e.preventDefault();
   const marker=document.createElement('div');
   marker.className='drag-ghost '+(vertical?'vertical':'');
-  marker.style.setProperty('--ship-length',sizes()[editingShip??draft.length]);
+  marker.style.setProperty('--ship-length',sizes()[activeShip()]);
   document.body.append(marker);
   drag={marker,pointer:e.pointerId};
   moveShip(e);
@@ -1000,17 +1034,14 @@ app.addEventListener('click',async e=>{
   }
   if(d.tab){tab=d.tab;render();}
   if(d.cell!==undefined)playCell(Number(d.cell));
+  if(d.ship!==undefined)selectShip(Number(d.ship));
   if(d.naval!==undefined) {
     const at=Number(d.naval);
     if(game().ready.every(Boolean))send({at});
     else {
-      const index=draft.findIndex((ship,i)=>tiles(ship,sizes()[i]).includes(at));
-      if(index>=0&&index!==editingShip) {
-        editingShip=index;
-        anchor=draft[index].at;
-        vertical=draft[index].vertical;
-      } else if(editingShip!==null||draft.length<sizes().length)anchor=at;
-      render();
+      const index=draft.findIndex((ship,i)=>ship&&tiles(ship,sizes()[i]).includes(at));
+      if(index>=0)selectShip(index);
+      else if(activeShip()>=0)placeShip(at);
     }
   }
   switch(d.action) {
@@ -1020,9 +1051,16 @@ app.addEventListener('click',async e=>{
       try{await navigator.clipboard.writeText(href());toast('Link di invito copiato.');}
       catch{showModal('<h2>Link di invito</h2><input aria-label="Link di invito" readonly value="'+escape(href())+'">');modal.querySelector('input').select();}
       break;
-    case 'apply-ship': if(anchor!==null)placeShip(anchor);break;
-    case 'cancel-ship': editingShip=null;anchor=null;render();break;
-    case 'rotate': vertical=!vertical;hoverAt=null;render();break;
+    case 'remove-ship':
+      delete draft[editingShip];
+      anchor=null;render();break;
+    case 'rotate':
+      vertical=!vertical;
+      if(draft[editingShip]) {
+        if(!placement(anchor).fits){vertical=!vertical;toast('Spazio insufficiente per ruotare la nave.');}
+        else draft[editingShip]={at:anchor,vertical};
+      }
+      render();break;
     case 'chat': chatOpen=!chatOpen;if(chatOpen&&compactRoom.matches)movesOpen=false;render();break;
     case 'moves': movesOpen=tab==='rules'||!movesOpen;tab='play';if(movesOpen&&compactRoom.matches)chatOpen=false;render();break;
     case 'copy-moves': {
