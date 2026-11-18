@@ -491,7 +491,7 @@ function naval(g) {
       fleetPanel(ships,[],false,editable)+controls+'</div></div>'+
       (editable?'<p>Scegli una nave a sinistra e clicca sulla griglia per posarla. Seleziona una nave posata per spostarla, ruotarla o rimuoverla.</p>':'<p>Flotta confermata.</p>');
   }
-  return '<div class="navy-switch" role="group" aria-label="Griglia visibile"><button class="outline" data-action="target" aria-pressed="'+(navalView==='target')+'">Bersaglio</button><button class="outline" data-action="own-fleet" aria-pressed="'+(navalView==='own-fleet')+'">La tua flotta</button></div><div class="navy-battle show-'+navalView+'"><div class="target-grid"><h3>Bersaglio</h3>'+navyGrid(null,g.outgoing,true,false)+'</div><div class="own-grid"><h3>La tua flotta</h3>'+navyGrid(g.mine,g.incoming,false,false)+'</div></div>'+fleetPanel(g.mine,g.incoming,false,false);
+  return '<div class="naval-combat"><div class="navy-switch" role="group" aria-label="Griglia visibile"><button class="outline" data-action="target" aria-pressed="'+(navalView==='target')+'">Bersaglio</button><button class="outline" data-action="own-fleet" aria-pressed="'+(navalView==='own-fleet')+'">La tua flotta</button></div><div class="navy-battle show-'+navalView+'"><div class="target-grid"><h3>Bersaglio</h3>'+navyGrid(null,g.outgoing,true,false)+'</div><div class="own-grid"><h3>La tua flotta</h3>'+navyGrid(g.mine,g.incoming,false,false)+'</div></div>'+fleetPanel(g.mine,g.incoming,false,false)+'</div>';
 }
 const unoColors={R:'Rosso',B:'Blu',G:'Verde',Y:'Giallo',W:'Jolly'};
 const unoValues={skip:'Salta',reverse:'Inverti',two:'+2',four:'+4',wild:'Jolly'};
