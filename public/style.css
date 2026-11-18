@@ -567,3 +567,13 @@ dialog::backdrop { background:rgb(28 22 46 / 44%); }
 
 .navy-grid .cell.moving-origin:not(.ghost-ok):not(.ghost-bad) { background:#d9e6f3; opacity:.5; }
 .navy-grid .moving-origin .sector-number { opacity:.55; }
+
+.ship-color-0 { --vessel:#74b6dd; }
+.ship-color-1 { --vessel:#eda064; }
+.ship-color-2 { --vessel:#84c5ac; }
+.ship-color-3 { --vessel:#b19bd6; }
+.ship-color-4 { --vessel:#e7c65b; }
+.ship-color-5 { --vessel:#dd91ae; }
+.navy-grid .cell.hull:not(.ghost-ok):not(.ghost-bad) { background:var(--vessel); }
+.fleet-row .fleet-segments b:not(.damage) { background:var(--vessel);color:#172339; }
+.fleet-row { border-inline-start:4px solid var(--vessel); }
