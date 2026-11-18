@@ -657,3 +657,23 @@ html.holding-piece,html.holding-piece * { cursor:grabbing !important; }
   .seat-gallery.other-hands { grid-template-columns:repeat(2,minmax(0,1fr));gap:4px; }
   .seat-gallery .hand-seat { min-height:42px;padding:4px 6px; }
 }
+
+.capture-stack { position:relative;min-width:0; }
+.pile-inspect { width:100%;background:transparent;border:0;color:inherit;font:inherit; }
+.capture-art { position:relative;display:inline-grid;place-items:center;min-width:43px; }
+.capture-art>i:not(.pile-back) { position:absolute;left:calc(4px + var(--i)*3px);top:5px;transform:rotate(78deg);pointer-events:none; }
+.table-scopa .capture-art .playing-card { height:35px; }
+.capture-stack .capture-preview { display:none;position:absolute;top:100%;right:0;z-index:6;width:min(21rem,75vw);padding:12px;color:#202932;background:#fffdf7;border:1px solid #bdb5a3;border-radius:10px;box-shadow:0 5px 20px #16271f38; }
+.capture-preview>div { display:flex;flex-wrap:wrap;gap:5px;align-items:start;max-height:36vh;overflow:auto; }
+.capture-preview .taken-face { display:grid;justify-items:center;font-size:.72rem; }
+.table-scopa .capture-preview .playing-card { height:60px; }
+.capture-stack:focus-within .capture-preview,.capture-stack:hover .capture-preview { display:block; }
+@media(prefers-reduced-motion:no-preference) {
+  .capture-preview { animation:reveal-captures .16s ease-out; }
+  @keyframes reveal-captures { from { opacity:0;transform:translateY(-4px); } }
+}
+@media(max-width:560px) {
+  .table-piles:has(.capture-stack) { position:relative; }
+  .capture-stack { position:static; }
+  .capture-stack .capture-preview { left:0;right:0;width:auto; }
+}
