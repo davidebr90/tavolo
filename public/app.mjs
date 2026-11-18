@@ -110,7 +110,7 @@ async function live() {
       if(state?.version===next.version)render();
     }
     accept(next);
-    if(next.closed||next.game.result!==null)stopLive?.();
+    if(state?.closed||state?.game.result!=null)stopLive?.();
   },()=>api(),{interval:1200,onError:error=>{
     if(error.status===404) {
       stopLive?.();
@@ -623,6 +623,7 @@ function room() {
     '</div></div>')+'</div>'+(chatOpen?chatPanel():'')+'</div>';
 }
 function render() {
+  clearBoardDrag();
   const focused=document.activeElement;
   const previousLog=document.querySelector('#chat-messages');
   const chatScroll=previousLog?.scrollTop??0;
@@ -781,44 +782,80 @@ function finishDrag(e) {
 }
 window.addEventListener('pointerup',finishDrag);
 window.addEventListener('pointercancel',finishDrag);
+function clearBoardDrag() {
+  if(!boardDrag)return;
+  cancelAnimationFrame(boardDrag.frame);
+  boardDrag.marker?.remove();
+  boardDrag.source.classList.remove('drag-origin');
+  boardDrag.target?.classList.remove('drop-preview');
+  for(const cell of boardDrag.targets)cell.classList.remove('drop-option');
+  boardDrag=null;
+}
 app.addEventListener('pointerdown',e=>{
   const source=e.target.closest('.chess .cell:enabled,.dama .cell:enabled');
-  if(!source||e.button!==0||!source.firstElementChild||!acting())return;
+  if(boardDrag||!source||e.button!==0||!source.firstElementChild||!acting())return;
   const from=Number(source.dataset.cell), g=game();
-  if(!g.moves.some(m=>(g.id==='chess'?m.from:m.path[0])===from))return;
-  boardDrag={pointer:e.pointerId,from,x:e.clientX,y:e.clientY,source,marker:null};
-});
-window.addEventListener('pointermove',e=>{
-  if(boardDrag?.pointer!==e.pointerId)return;
-  if(!boardDrag.marker) {
-    if(Math.hypot(e.clientX-boardDrag.x,e.clientY-boardDrag.y)<7)return;
-    const marker=document.createElement('div');
-    marker.className='piece-ghost '+game().id;
-    marker.append(boardDrag.source.firstElementChild.cloneNode(true));
-    document.body.append(marker);
-    boardDrag.marker=marker;
+  const destinations=new Set();
+  for(const move of g.moves) {
+    const path=g.id==='chess'?[move.from,move.to]:move.path;
+    if(path[0]===from)destinations.add(path[1]);
   }
-  boardDrag.marker.style.transform='translate('+e.clientX+'px,'+e.clientY+'px) translate(-50%,-50%)';
+  if(!destinations.size)return;
+  const board=source.closest('.chess,.dama');
+  const targets=new Set([...board.querySelectorAll('[data-cell]')].filter(cell=>destinations.has(Number(cell.dataset.cell))));
+  boardDrag={pointer:e.pointerId,from,x:e.clientX,y:e.clientY,source,targets,marker:null,frame:0};
+});
+function dragTarget(x,y) {
+  const cell=document.elementFromPoint(x,y)?.closest('[data-cell]');
+  return boardDrag.targets.has(cell)?cell:null;
+}
+function paintBoardDrag() {
+  const d=boardDrag;
+  d.frame=0;
+  const target=dragTarget(d.clientX,d.clientY);
+  if(target!==d.target) {
+    d.target?.classList.remove('drop-preview');
+    target?.classList.add('drop-preview');
+    d.target=target;
+  }
+  const box=target?.getBoundingClientRect();
+  const x=box?box.left+box.width/2:d.clientX;
+  const y=box?box.top+box.height/2:d.clientY;
+  d.marker.style.transform='translate('+x+'px,'+y+'px) translate(-50%,-50%)';
+}
+window.addEventListener('pointermove',e=>{
+  const d=boardDrag;
+  if(d?.pointer!==e.pointerId)return;
+  if(!d.marker) {
+    if(Math.hypot(e.clientX-d.x,e.clientY-d.y)<7)return;
+    d.marker=document.createElement('div');
+    d.marker.className='piece-ghost '+game().id;
+    d.marker.style.width=d.source.getBoundingClientRect().width+'px';
+    d.marker.append(d.source.firstElementChild.cloneNode(true));
+    document.body.append(d.marker);
+    d.source.classList.add('drag-origin');
+    for(const cell of d.targets)cell.classList.add('drop-option');
+  }
+  d.clientX=e.clientX;
+  d.clientY=e.clientY;
+  if(!d.frame)d.frame=requestAnimationFrame(paintBoardDrag);
 });
 function finishBoardDrag(e) {
   if(boardDrag?.pointer!==e.pointerId)return;
   const {marker,from}=boardDrag;
-  boardDrag=null;
+  const target=marker&&e.type==='pointerup'&&dragTarget(e.clientX,e.clientY);
+  clearBoardDrag();
   if(!marker)return;
-  marker.remove();
   ignoreClick=true;
   setTimeout(()=>{ignoreClick=false;},0);
-  if(e.type==='pointercancel'||!acting())return;
-  const target=document.elementFromPoint(e.clientX,e.clientY)?.closest('.chess [data-cell],.dama [data-cell]');
-  if(!target)return;
-  const to=Number(target.dataset.cell), g=game();
-  if(!g.moves.some(m=>g.id==='chess'?m.from===from&&m.to===to:m.path[0]===from&&m.path[1]===to))return;
-  promotionTarget=to;
+  if(!target||!acting())return;
+  promotionTarget=Number(target.dataset.cell);
   prefix=[from];
-  playCell(to);
+  playCell(promotionTarget);
 }
 window.addEventListener('pointerup',finishBoardDrag);
 window.addEventListener('pointercancel',finishBoardDrag);
+window.addEventListener('blur',clearBoardDrag);
 app.addEventListener('click',async e=>{
   if(ignoreClick)return;
   const b=e.target.closest('button');if(!b)return;
