@@ -9,7 +9,7 @@ const app=document.querySelector('#app'), modal=document.querySelector('#modal')
 const codePattern=/^[a-f0-9]{24}$/;
 const codeParam=new URLSearchParams(location.search).get('stanza');
 let code=codePattern.test(codeParam)?codeParam:null, token=code?localStorage.getItem('tavolo:'+code):null;
-let state, tab='play', navalView='target', prefix=[], drawnVersion=-1, connected=false, pending=null, busy=false, draft=[], vertical=false;
+let state, tab='play', navalView='target', prefix=[], drawnVersion=-1, connected=false, pending=null, busy=false, draft=[], editingShip=null, anchor=null, vertical=false;
 let toastTimer, stopLive, restoring=false, restoreError='', expired=false, transport='ws';
 const seenRooms=new Map(), monitors=new Map(), unavailable=new Set();
 const closingRooms=new Set();
@@ -450,12 +450,18 @@ function navyGrid(ships,shots,target,placing) {
 function naval(g) {
   const placement=!g.ready.every(Boolean);
   if(placement) {
-    const canPlace=connected&&!state.closed&&state.players.length===2&&!g.ready[state.side]&&!pending;
-    return '<div class="navy-setup"><div><h3>La tua flotta · '+g.size+' × '+g.size+'</h3>'+navyGrid(g.mine??draft,[],false,canPlace&&draft.length<sizes().length)+'</div>'+
-      (g.ready[state.side]?'<p>Flotta confermata. I colpi iniziano quando entrambi siete pronti.</p>':
-      '<div class="fleet-tools"><h3>'+(draft.length<sizes().length?'Navi schierate '+draft.length+' / '+sizes().length:'Flotta pronta')+'</h3>'+
-      (canPlace&&draft.length<sizes().length?'<button type="button" class="ship-drag outline" data-drag-ship aria-label="Trascina la nave o seleziona una casella">⚓ Nave da '+sizes()[draft.length]+' caselle</button>':'')+
-      '<div class="fleet-actions"><button class="outline" data-action="rotate">'+(vertical?'Verticale':'Orizzontale')+'</button><button class="outline" data-action="random">Disponi a caso</button><button class="link" data-action="reset">Svuota</button><button class="primary" data-action="fleet" '+(canPlace&&draft.length===sizes().length?'':'disabled')+'>Conferma flotta</button></div></div>')+'</div>';
+    const editable=connected&&!state.closed&&!g.ready[state.side]&&!pending;
+    const length=sizes()[editingShip??draft.length];
+    const canConfirm=editable&&state.players.length===2&&draft.length===sizes().length&&anchor===null;
+    const controls='<div class="fleet-tools"><h3>Navi schierate '+draft.length+' / '+sizes().length+'</h3>'+
+      '<p>Tocca una casella per vedere l’ingombro. Tocca una nave già posata per modificarla.</p>'+
+      (length?'<div class="fleet-actions"><button class="outline ship-drag" data-drag-ship>Trascina nave da '+length+'</button>'+
+      '<button class="outline" data-action="rotate">Ruota nave · '+(vertical?'↕ verticale':'↔ orizzontale')+'</button></div>':'')+
+      (anchor!==null?'<div class="fleet-actions"><button class="primary" data-action="apply-ship" '+(placement(anchor).fits?'':'disabled')+'>'+(editingShip===null?'Posiziona qui':'Salva posizione')+'</button><button class="link" data-action="cancel-ship">Annulla</button></div>':'')+
+      '<div class="fleet-actions"><button class="outline" data-action="random">Disponi a caso</button><button class="link" data-action="reset">Svuota</button><button class="primary" data-action="fleet" '+(canConfirm?'':'disabled')+'>Conferma flotta</button></div>'+
+      (state.players.length<2?'<p>Puoi preparare la flotta ora e confermarla quando entra il secondo giocatore.</p>':'')+'</div>';
+    return '<div class="navy-setup"><div><h3>La tua flotta · '+g.size+' × '+g.size+'</h3>'+navyGrid(g.ready[state.side]?g.mine:draft,[],false,editable)+'</div>'+
+      (editable?controls:g.ready[state.side]?'<p>Flotta confermata.</p>':'')+'</div>';
   }
   return '<div class="navy-switch" role="group" aria-label="Griglia visibile"><button class="outline" data-action="target" aria-pressed="'+(navalView==='target')+'">Bersaglio</button><button class="outline" data-action="own-fleet" aria-pressed="'+(navalView==='own-fleet')+'">La tua flotta</button></div><div class="navy-battle show-'+navalView+'"><div class="target-grid"><h3>Bersaglio</h3>'+navyGrid(null,g.outgoing,true,false)+'</div><div class="own-grid"><h3>La tua flotta</h3>'+navyGrid(g.mine,g.incoming,false,false)+'</div></div>';
 }
@@ -638,6 +644,7 @@ function render() {
     restoreError?'<section class="entry"><h1>Connessione interrotta</h1><p>'+restoreError+'</p><button class="primary" data-action="restore">Riprova</button></section>':
     '<section class="entry"><h1>Entra nella partita.</h1><p>Servono solo il tuo nickname e il link di invito.</p><button class="primary" data-action="enter">Scegli il nickname</button></section>';
   app.innerHTML=state?room():code?entry:lobby();
+  
   if(!state&&!code)filterCatalog();
   if(state&&chatOpen&&!document.hidden){
     markChatRead();
@@ -660,6 +667,7 @@ function render() {
     input?.focus({preventScroll:true});
     input?.setSelectionRange(cursor,cursor);
   }
+  if(anchor!==null&&app.querySelector('.navy-setup'))preview(null);
   if(deckFocused)document.getElementById(deckFocused)?.focus({preventScroll:true});
 }
 async function send(action) {
@@ -722,15 +730,15 @@ function autoPlace() {
   render();
 }
 function placement(at) {
-  const length=sizes()[draft.length];
+  const length=sizes()[editingShip??draft.length];
   if(at===null||!length)return {cells:[],fits:false};
-  const cells=tiles({at,vertical},length), occupied=draft.flatMap((ship,i)=>tiles(ship,sizes()[i]));
+  const cells=tiles({at,vertical},length), occupied=draft.flatMap((ship,i)=>i===editingShip?[]:tiles(ship,sizes()[i]));
   return {cells,fits:cells.every(i=>i>=0&&!occupied.includes(i))};
 }
 function preview(at) {
-  if(at===hoverAt)return;
+
   hoverAt=at;
-  const {cells,fits}=placement(at);
+  const {cells,fits}=placement(at??anchor);
   for(const el of app.querySelectorAll('.navy-setup [data-naval]')) {
     const covered=cells.includes(Number(el.dataset.naval));
     el.classList.toggle('ghost-ok',covered&&fits);
@@ -739,7 +747,9 @@ function preview(at) {
 }
 function placeShip(at) {
   if(!placement(at).fits){toast('La nave esce dalla griglia o si sovrappone.');return;}
-  draft.push({at,vertical});
+  draft[editingShip??draft.length]={at,vertical};
+  editingShip=null;
+  anchor=null;
   hoverAt=null;
   render();
 }
@@ -761,7 +771,7 @@ app.addEventListener('pointerdown',e=>{
   e.preventDefault();
   const marker=document.createElement('div');
   marker.className='drag-ghost '+(vertical?'vertical':'');
-  marker.style.setProperty('--ship-length',sizes()[draft.length]);
+  marker.style.setProperty('--ship-length',sizes()[editingShip??draft.length]);
   document.body.append(marker);
   drag={marker,pointer:e.pointerId};
   moveShip(e);
@@ -776,7 +786,8 @@ function moveShip(e) {
 window.addEventListener('pointermove',moveShip);
 function finishDrag(e) {
   if(drag?.pointer!==e.pointerId)return;
-  const at=hoverAt;
+  const target=document.elementFromPoint(e.clientX,e.clientY)?.closest('.navy-setup [data-naval]:enabled');
+  const at=target?Number(target.dataset.naval):null;
   drag.marker.remove();
   drag=null;
   preview(null);
@@ -993,7 +1004,13 @@ app.addEventListener('click',async e=>{
     const at=Number(d.naval);
     if(game().ready.every(Boolean))send({at});
     else {
-      placeShip(at);
+      const index=draft.findIndex((ship,i)=>tiles(ship,sizes()[i]).includes(at));
+      if(index>=0&&index!==editingShip) {
+        editingShip=index;
+        anchor=draft[index].at;
+        vertical=draft[index].vertical;
+      } else if(editingShip!==null||draft.length<sizes().length)anchor=at;
+      render();
     }
   }
   switch(d.action) {
@@ -1003,6 +1020,8 @@ app.addEventListener('click',async e=>{
       try{await navigator.clipboard.writeText(href());toast('Link di invito copiato.');}
       catch{showModal('<h2>Link di invito</h2><input aria-label="Link di invito" readonly value="'+escape(href())+'">');modal.querySelector('input').select();}
       break;
+    case 'apply-ship': if(anchor!==null)placeShip(anchor);break;
+    case 'cancel-ship': editingShip=null;anchor=null;render();break;
     case 'rotate': vertical=!vertical;hoverAt=null;render();break;
     case 'chat': chatOpen=!chatOpen;if(chatOpen&&compactRoom.matches)movesOpen=false;render();break;
     case 'moves': movesOpen=tab==='rules'||!movesOpen;tab='play';if(movesOpen&&compactRoom.matches)chatOpen=false;render();break;
@@ -1019,8 +1038,8 @@ app.addEventListener('click',async e=>{
     case 'bg-roll': send({roll:true});break;
     case 'target':
     case 'own-fleet': navalView=d.action;render();break;
-    case 'random': autoPlace();break;
-    case 'reset': draft=[];render();break;
+    case 'random': editingShip=null;anchor=null;autoPlace();break;
+    case 'reset': editingShip=null;anchor=null;draft=[];render();break;
     case 'fleet': send({ships:draft});break;
     case 'cancel': prefix=[];render();break;
     case 'draw': send({draw:true});break;
