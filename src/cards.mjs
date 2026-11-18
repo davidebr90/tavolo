@@ -59,7 +59,7 @@ function scopaPlay(state,action) {
     s.lastCapture=turn;
     if(!final&&!s.table.length) s.sweeps[turn]++;
   } else s.table.push(card);
-  s.last={card,side:turn};
+  s.last={card,side:turn,take:[...take]};
   s.turn=1-turn;
   if(s.hands.every(h=>!h.length)&&s.deck.length) s.hands=[s.deck.splice(0,3),s.deck.splice(0,3)];
   if(!final) return s;
@@ -138,7 +138,7 @@ export function playCards(s,action) {
 export function viewCards(s,side) {
   const {id,turn,result,last}=s, hand=s.hands[side], own=turn===side&&result===null;
   const out={id,turn,result,last,hand,opponentCount:s.hands[1-side].length,remaining:s.deck.length};
-  if(id==='scopa') return {...out,table:s.table,scores:s.scores,points:s.points,round:s.round,sweeps:s.sweeps,
+  if(id==='scopa') return {...out,table:s.table,captureCounts:s.captured.map(cards=>cards.length),scores:s.scores,points:s.points,round:s.round,sweeps:s.sweeps,
     takes:own?Object.fromEntries(hand.map(c=>[c,takes(s.table,c)])):{}};
   return {...out,top:s.discard.at(-1),color:s.color,drawn:own&&s.drawn!==null,
     playable:own?hand.filter(c=>unoLegal(s,c)):[]};
