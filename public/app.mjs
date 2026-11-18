@@ -771,16 +771,22 @@ function room() {
     s.closeRequest==null?'':s.closeRequest===s.side?
     '<div class="closure-notice" role="status">Richiesta di chiusura inviata. In attesa di risposta.</div>':
     '<div class="closure-notice"><span role="status">'+escape(s.players[s.closeRequest])+' chiede di chiudere la partita.</span><div><button class="outline" data-action="decline-close" '+disabled+'>Rifiuta</button><button class="primary" data-action="accept-close" '+disabled+'>Accetta</button></div></div>';
-  return '<div class="room-title"><div class="room-heading"><h1>'+(g.id==='scopa'&&s.maxPlayers===4?'Scopone scientifico':meta.name)+'</h1><small>Giocatori in stanza · '+s.players.length+' / '+(s.maxPlayers??2)+'</small>'+(s.roomName?'<small>'+escape(s.roomName)+'</small>':'')+'</div>'+
+  const capacity=s.maxPlayers??2;
+  const free=capacity-s.players.length;
+  const canInvite=free>0&&!s.closed&&g.result===null&&s.closeRequest==null;
+  const invite=canInvite?'<button class="primary room-invite" data-action="invite" aria-label="Invita giocatori: copia il link della stanza">'+icon('link')+'Invita giocatori</button>':'';
+  return '<div class="room-title phase-header"><div class="room-identity"><div class="room-heading"><h1>'+(g.id==='scopa'&&capacity===4?'Scopone scientifico':meta.name)+'</h1>'+
+    '<div class="room-byline">'+(s.roomName?'<strong>'+escape(s.roomName)+'</strong>':'')+'<span>'+s.players.length+' / '+capacity+' giocatori</span>'+
+    (canInvite?'<span>'+free+(free===1?' posto libero':' posti liberi')+'</span>':'')+'</div></div>'+invite+'</div>'+
     '<div class="room-tools"><div class="tabs" role="tablist" aria-label="Partita e regole"><button id="tab-play" role="tab" aria-controls="tabpanel" aria-selected="'+(tab==='play')+'" tabindex="'+(tab==='play'?0:-1)+'" data-tab="play">'+icon('board')+'Partita</button><button id="tab-rules" role="tab" aria-controls="tabpanel" aria-selected="'+(tab==='rules')+'" tabindex="'+(tab==='rules'?0:-1)+'" data-tab="rules">'+icon('book')+'Regole</button></div>'+
     '<div class="room-actions" role="group" aria-label="Comandi della partita">'+
     (hasMoveHistory?'<button class="outline" data-action="moves" aria-expanded="'+showMoves+'">'+icon('history')+'Mosse</button>':'')+
-    '<button class="outline" data-action="invite" aria-label="Copia link di invito">'+icon('link')+'Invita</button><button class="outline" id="chat-toggle" data-action="chat" aria-expanded="'+chatOpen+'">'+chatLabel(s)+'</button>'+
-    (!s.closed&&g.result===null&&s.closeRequest==null?'<button class="outline close-game" data-action="close-game" aria-label="Chiudi partita" title="Chiudi partita" '+disabled+'>'+icon('close')+'<span>Chiudi partita</span></button>':'')+'</div></div></div>'+
+    '<button class="outline" id="chat-toggle" data-action="chat" aria-expanded="'+chatOpen+'">'+chatLabel(s)+'</button>'+
+    (!s.closed&&g.result===null&&s.closeRequest==null?'<button class="link close-game" data-action="close-game" aria-label="Chiudi partita" title="Chiudi partita" '+disabled+'>'+icon('close')+'<span>Chiudi partita</span></button>':'')+'</div></div></div>'+
     closure+'<div class="room-layout '+(chatOpen?'with-chat ':'')+(showMoves?'with-moves':'')+'">'+(showMoves?movePanel(g):'')+
     '<div id="tabpanel" role="tabpanel" aria-labelledby="tab-'+tab+'">'+(tab==='rules'?rules(g.id):
-    '<div class="match"><div class="players">'+Array.from({length:s.maxPlayers??2},(_,i)=>i).map(i=>'<div class="player '+(seatHasTurn(s,i)?'current':'')+'"><i class="seat-mark seat-'+i+'" aria-hidden="true"></i><strong title="'+escape(s.players[i]??'Posto libero')+'">'+displayNickname(s.players[i]??'Posto libero',s.playerMarkup?.[i])+(i===s.side?' (tu)':'')+'</strong><small>'+(s.maxPlayers>2?(g.id==='scopa'?'Squadra '+(i%2+1):'Posto '+(i+1)):meta.players[i])+'</small></div>').join('')+'</div>'+
-    '<div class="banner '+tone+'" role="status"><i></i>'+escape(wording)+'</div>'+pass+
+    '<div class="match">'+'<div class="banner '+tone+'" role="status"><i></i>'+escape(wording)+'</div>'+'<div class="players">'+Array.from({length:s.maxPlayers??2},(_,i)=>i).map(i=>'<div class="player '+(seatHasTurn(s,i)?'current':'')+'"><i class="seat-mark seat-'+i+'" aria-hidden="true"></i><strong title="'+escape(s.players[i]??'Posto libero')+'">'+displayNickname(s.players[i]??'Posto libero',s.playerMarkup?.[i])+(i===s.side?' (tu)':'')+'</strong><small>'+(s.maxPlayers>2?(g.id==='scopa'?'Squadra '+(i%2+1):'Posto '+(i+1)):meta.players[i])+'</small></div>').join('')+'</div>'+
+    pass+
     (g.id==='naval'?naval(g):['scopa','uno'].includes(g.id)?cardTable(g):['go','dots','nim','backgammon'].includes(g.id)?strategyBoard(g):checker(g))+
     '<div class="match-actions">'+(g.canDraw&&acting()?'<button class="outline" data-action="draw">'+icon('draw')+'Richiedi patta</button>':'')+
     (pending&&!busy?'<button class="primary" data-action="retry">'+icon('redo')+'Recupera mossa</button>':'')+
