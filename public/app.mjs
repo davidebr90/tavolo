@@ -481,7 +481,7 @@ function navyGrid(ships,shots,target,placing) {
     const number=ship?'<small class="sector-number">'+ship.sector+'</small>':'';
     const tile=cell(number+(shot?(shot.hit?'×':'·'):''),[ship?'hull ship-color-'+ship.index:'',placing&&ship&&ship.index===editingShip?'moving-origin':'',shot?.hit?'hit':shot?'miss':'',down?'sunk':'',state.version>drawnVersion&&game().last?.at===i&&game().last.side===(target?state.side:1-state.side)?'animate':''].join(' '),
       'data-naval="'+i+'"',coord(i,size)+(shot?(shot.hit?' colpito':' acqua'):ship?' nave '+(ship.index+1)+' settore '+ship.sector+(ship.sector===1?' prua':ship.sector===ship.length?' poppa':''):''),placing||(target&&acting()&&!shot));
-    if(!placing||!ship)return tile;
+    if(!placing||!ship||ship.length===1)return tile;
     return '<div class="ship-sector">'+tile+'<span class="turn-ship">'+[-1,1].map(dir=>'<button data-pivot="'+i+'" data-spin="'+dir+'" aria-label="Ruota '+(dir===1?'in senso orario':'in senso antiorario')+'">'+(dir===1?'↻':'↺')+'</button>').join('')+'</span></div>';
   }).join('')+'</div>';
   return '<div class="sea-chart" style="--n:'+size+'"><div class="sea-cols">'+Array.from({length:size},(_,i)=>'<span>'+String.fromCharCode(65+i)+'</span>').join('')+'</div><div class="sea-rows">'+Array.from({length:size},(_,i)=>'<span>'+(i+1)+'</span>').join('')+'</div>'+grid+'</div>';
@@ -520,7 +520,8 @@ function naval(g) {
     const missing=sizes().filter((_,i)=>!ships?.[i]).length;
     const status=g.ready[state.side]?(state.players.length<2?'Flotta confermata. Invita il secondo giocatore.':'Flotta confermata. In attesa della flotta avversaria.'):!connected?'Connessione in corso…':pending?'Conferma in corso…':missing?'Navi ancora da posizionare: '+missing:state.players.length<2?'Flotta completa. Invita il secondo giocatore per abilitare la conferma.':'Flotta completa. Puoi confermare anche se l’avversario sta ancora posizionando le navi.';
     const controls=editable?'<div class="fleet-actions">'+
-      (activeShip()>=0?'<button class="outline ship-drag" data-drag-ship>Trascina nave</button><button class="outline" data-action="rotate">Ruota nave · '+(vertical?'↕':'↔')+'</button>':'')+
+      (activeShip()>=0?'<button class="outline ship-drag" data-drag-ship>Trascina nave</button>':'')+
+      (sizes()[activeShip()]>1?'<button class="outline" data-action="rotate">Ruota nave · '+(vertical?'↕':'↔')+'</button>':'')+
       (selected?'<button class="outline" data-action="remove-ship">Rimuovi nave</button>':'')+
       '<button class="outline" data-action="random">Disponi a caso</button><button class="link" data-action="reset">Svuota</button>'+
       '<button class="primary" data-action="fleet" '+(complete&&state.players.length===2?'':'disabled')+'>Conferma flotta</button></div>':'';
