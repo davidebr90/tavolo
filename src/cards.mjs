@@ -12,7 +12,9 @@ const rank=card=>card%10+1;
 const suit=card=>Math.floor(card/10);
 const invalid=()=>{throw Error('Mossa non valida.');};
 function scopaDeal(s,first) {
-  const deck=shuffle(numbers(40)), table=deck.splice(0,4);
+  const deck=shuffle(numbers(40));
+  if(s.playerCount===4)return {...s,first,turn:first,table:[],hands:numbers(4).map(()=>deck.splice(0,10)),deck,captured:[[],[]],sweeps:[0,0],lastCapture:null};
+  const table=deck.splice(0,4);
   while(table.filter(c=>rank(c)===10).length>=3) {
     deck.push(...table.splice(0));
     shuffle(deck);
@@ -55,12 +57,12 @@ function scopaPlay(state,action) {
   const final=!s.deck.length&&s.hands.every(h=>!h.length);
   if(take.length) {
     s.table=s.table.filter(c=>!take.includes(c));
-    s.captured[turn].push(card,...take);
-    s.lastCapture=turn;
-    if(!final&&!s.table.length) s.sweeps[turn]++;
+    s.captured[turn%2].push(card,...take);
+    s.lastCapture=turn%2;
+    if(!final&&!s.table.length) s.sweeps[turn%2]++;
   } else s.table.push(card);
   s.last={card,side:turn,take:[...take]};
-  s.turn=1-turn;
+  s.turn=(turn+1)%s.hands.length;
   if(s.hands.every(h=>!h.length)&&s.deck.length) s.hands=[s.deck.splice(0,3),s.deck.splice(0,3)];
   if(!final) return s;
   if(s.lastCapture!==null) s.captured[s.lastCapture].push(...s.table.splice(0));
@@ -70,16 +72,16 @@ function scopaPlay(state,action) {
     s.result=Number(s.scores[1]>s.scores[0]);
     return s;
   }
-  return scopaDeal({...s,round:s.round+1},1-s.first);
+  return scopaDeal({...s,round:s.round+1},(s.first+1)%s.hands.length);
 }
 export const colors=['R','B','G','Y'];
 const fields=card=>card.split(':');
-function unoStart() {
+function unoStart(count) {
   const deck=shuffle([
     ...colors.flatMap(c=>[c+':0:0',...['1','2','3','4','5','6','7','8','9','skip','reverse','two'].flatMap(v=>[c+':'+v+':0',c+':'+v+':1'])]),
     ...numbers(4).flatMap(i=>['W:wild:'+i,'W:four:'+i])
   ]);
-  const hands=[deck.splice(0,7),deck.splice(0,7)];
+  const hands=numbers(count).map(()=>deck.splice(0,7));
   const [top]=deck.splice(deck.findIndex(c=>/^.[\u003a]\d:/.test(c)),1);
   shuffle(deck);
   return {id:'uno',turn:0,result:null,hands,deck,discard:[top],color:fields(top)[0],drawn:null,last:null};
@@ -102,16 +104,17 @@ function unoDraw(s,side,count) {
 }
 function unoPlay(state,action) {
   const s=structuredClone(state), side=s.turn;
+  const advance=(steps=1)=>(side+steps*(s.direction??1)+s.hands.length*2)%s.hands.length;
   if(action.draw===true&&s.drawn===null) {
     const card=unoDraw(s,side,1);
     if(card&&unoLegal(s,card)) s.drawn=card;
-    else s.turn=1-side;
+    else s.turn=advance();
     s.last={type:'draw',side};
     return s;
   }
   if(action.pass===true&&s.drawn!==null) {
     s.drawn=null;
-    s.turn=1-side;
+    s.turn=advance();
     s.last={type:'pass',side};
     return s;
   }
@@ -124,20 +127,24 @@ function unoPlay(state,action) {
   s.discard.push(card);
   s.drawn=null;
   s.last={type:'play',side,card};
-  if(value==='two'||value==='four') unoDraw(s,1-side,value==='two'?2:4);
-  else if(value!=='reverse'&&value!=='skip') s.turn=1-side;
+  if(value==='reverse')s.direction=-(s.direction??1);
+  const penalty=value==='two'?2:value==='four'?4:0;
+  if(penalty)unoDraw(s,advance(),penalty);
+  s.turn=advance(penalty||value==='skip'||(value==='reverse'&&s.hands.length===2)?2:1);
   if(!s.hands[side].length) s.result=side;
   return s;
 }
-export function startCards(id) {
-  return id==='scopa'?scopaDeal({id,result:null,round:1,scores:[0,0],points:null,last:null},0):unoStart();
+export function startCards(id,options) {
+  const count=options?.players??2;
+  if(!(id==='scopa'?[2,4]:numbers(9).map(i=>i+2)).includes(count))invalid();
+  return id==='scopa'?scopaDeal({id,playerCount:count,result:null,round:1,scores:[0,0],points:null,last:null},0):unoStart(count);
 }
 export function playCards(s,action) {
   return s.id==='scopa'?scopaPlay(s,action):unoPlay(s,action);
 }
 export function viewCards(s,side) {
   const {id,turn,result,last}=s, hand=s.hands[side], own=turn===side&&result===null;
-  const out={id,turn,result,last,hand,opponentCount:s.hands[1-side].length,remaining:s.deck.length};
+  const out={id,turn,result,last,hand,handCounts:s.hands.map(h=>h.length),opponentCount:s.hands[(side+1)%s.hands.length].length,remaining:s.deck.length};
   if(id==='scopa') return {...out,table:s.table,captureCounts:s.captured.map(cards=>cards.length),scores:s.scores,points:s.points,round:s.round,sweeps:s.sweeps,
     takes:own?Object.fromEntries(hand.map(c=>[c,takes(s.table,c)])):{}};
   return {...out,top:s.discard.at(-1),color:s.color,drawn:own&&s.drawn!==null,
