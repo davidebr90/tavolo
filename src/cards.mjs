@@ -13,14 +13,14 @@ const suit=card=>Math.floor(card/10);
 const invalid=()=>{throw Error('Mossa non valida.');};
 function scopaDeal(s,first) {
   const deck=shuffle(numbers(40));
-  if(s.playerCount===4)return {...s,first,turn:first,table:[],hands:numbers(4).map(()=>deck.splice(0,10)),deck,captured:[[],[]],sweeps:[0,0],lastCapture:null};
+  if(s.playerCount===4)return {...s,first,turn:first,table:[],hands:numbers(4).map(()=>deck.splice(0,10)),deck,captured:[[],[]],sweepCards:[[],[]],sweeps:[0,0],lastCapture:null};
   const table=deck.splice(0,4);
   while(table.filter(c=>rank(c)===10).length>=3) {
     deck.push(...table.splice(0));
     shuffle(deck);
     table.push(...deck.splice(0,4));
   }
-  return {...s,first,turn:first,table,deck,hands:[deck.splice(0,3),deck.splice(0,3)],captured:[[],[]],sweeps:[0,0],lastCapture:null};
+  return {...s,first,turn:first,table,deck,hands:[deck.splice(0,3),deck.splice(0,3)],captured:[[],[]],sweepCards:[[],[]],sweeps:[0,0],lastCapture:null};
 }
 function takes(table,card) {
   const target=rank(card), exact=table.filter(c=>rank(c)===target);
@@ -48,6 +48,15 @@ function scoreScopa(s) {
   }));
   return points;
 }
+function securedPoints(s) {
+  // Award a category only if the other team cannot catch up with all remaining cards.
+  return s.captured.map((cards,team)=>{
+    const owned=new Set(cards);
+    const captured=s.captured.slice();
+    captured[1-team]=numbers(40).filter(card=>!owned.has(card));
+    return scoreScopa({...s,captured})[team];
+  });
+}
 function scopaPlay(state,action) {
   const {card,take}=action,{turn}=state;
   if(!state.hands[turn].includes(card)||!Array.isArray(take)) invalid();
@@ -59,7 +68,10 @@ function scopaPlay(state,action) {
     s.table=s.table.filter(c=>!take.includes(c));
     s.captured[turn%2].push(card,...take);
     s.lastCapture=turn%2;
-    if(!final&&!s.table.length) s.sweeps[turn%2]++;
+    if(!final&&!s.table.length) {
+      s.sweeps[turn%2]++;
+      (s.sweepCards??=[[],[]])[turn%2].push(card);
+    }
   } else s.table.push(card);
   s.last={card,side:turn,take:[...take]};
   s.turn=(turn+1)%s.hands.length;
@@ -145,7 +157,7 @@ export function playCards(s,action) {
 export function viewCards(s,side) {
   const {id,turn,result,last}=s, hand=s.hands[side], own=turn===side&&result===null;
   const out={id,turn,result,last,hand,handCounts:s.hands.map(h=>h.length),opponentCount:s.hands[(side+1)%s.hands.length].length,remaining:s.deck.length};
-  if(id==='scopa') return {...out,table:s.table,captureCounts:s.captured.map(cards=>cards.length),scores:s.scores,points:s.points,round:s.round,sweeps:s.sweeps,
+  if(id==='scopa') return {...out,table:s.table,captured:s.captured,sweepCards:s.sweepCards??[[],[]],securedPoints:securedPoints(s),captureCounts:s.captured.map(cards=>cards.length),scores:s.scores,points:s.points,round:s.round,sweeps:s.sweeps,
     takes:own?Object.fromEntries(hand.map(c=>[c,takes(s.table,c)])):{}};
   return {...out,top:s.discard.at(-1),color:s.color,drawn:own&&s.drawn!==null,
     playable:own?hand.filter(c=>unoLegal(s,c)):[]};
