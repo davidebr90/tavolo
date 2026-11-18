@@ -460,3 +460,24 @@ dialog::backdrop { background:rgb(28 22 46 / 44%); }
 @media (prefers-reduced-motion:reduce) {
   *,*::before,*::after { scroll-behavior:auto!important; animation-duration:.01ms!important; transition-duration:.01ms!important; }
 }
+
+.hand [data-hand]:enabled { touch-action:pan-x; cursor:grab; }
+.card-in-flight { opacity:.45; }
+.flying-card { position:fixed!important; top:0; left:0; z-index:20; pointer-events:none; margin:0; }
+.card-drop-ready,.move-option,.move-preview { outline:2px dashed var(--accent); outline-offset:-3px; }
+.card-drop-hover,.card-center .move-preview { outline:3px solid var(--accent); background-color:#eee9fa; }
+.nim-row .move-preview { color:var(--accent); background:#e6def9; }
+.four .move-preview::after { content:''; position:absolute; inset:15%; border:3px dashed var(--accent); border-radius:50%; pointer-events:none; }
+.four .cell { position:relative; }
+:is(.tris,.reversi,.go,.dots-board,.bg-board) .cell:enabled:is(:hover,:focus-visible),
+[data-naval]:enabled:focus-visible { box-shadow:inset 0 0 0 3px var(--accent); }
+@media (prefers-reduced-motion:no-preference) {
+  .flying-card { transition:transform 70ms ease-out; }
+  .hand [data-hand]:enabled { transition:transform 120ms ease-out; }
+  .hand [data-hand]:enabled:focus-visible { transform:translateY(-4px); }
+  @media (hover:hover) {
+    .hand [data-hand]:enabled:hover { transform:translateY(-4px); }
+  }
+  :is(.tris,.reversi,.go,.dots-board,.bg-board,.nim-row) .cell:enabled:active,
+  [data-naval]:enabled:active { transform:scale(.94); }
+}
