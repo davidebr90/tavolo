@@ -481,3 +481,26 @@ dialog::backdrop { background:rgb(28 22 46 / 44%); }
   :is(.tris,.reversi,.go,.dots-board,.bg-board,.nim-row) .cell:enabled:active,
   [data-naval]:enabled:active { transform:scale(.94); }
 }
+
+/* A moving inset ring leaves game pieces and ownership colors visible. */
+@keyframes tavolo-preview-ring {
+  from { outline-offset:-2px; }
+  to { outline-offset:-5px; }
+}
+:is(.navy-grid .ghost-ok,.navy-grid .ghost-bad,.drop-preview,.move-preview,.card-drop-hover,
+.move-option:is(:hover,:focus-visible),.board .cell:enabled:is(:hover,:focus-visible),
+.target-grid .cell:enabled:is(:hover,:focus-visible),.dots-board .cell:enabled:is(:hover,:focus-visible),
+.bg-board .cell:enabled:is(:hover,:focus-visible),.hand .playing-card:enabled:is(:hover,:focus-visible)) {
+  outline:3px solid #6744ae;
+  outline-offset:-3px;
+}
+.navy-grid .cell.ghost-ok { background:#a6ead8; outline-color:#156651; }
+.navy-grid .cell.ghost-bad { background:#ffc6c6; outline-color:#a22a39; }
+@media (prefers-reduced-motion:no-preference) {
+  :is(.ghost-ok,.ghost-bad,.drop-preview,.move-preview,.card-drop-hover,
+  .board .cell:enabled:is(:hover,:focus-visible),.target-grid .cell:enabled:is(:hover,:focus-visible),
+  .dots-board .cell:enabled:is(:hover,:focus-visible),.bg-board .cell:enabled:is(:hover,:focus-visible),
+  .hand .playing-card:enabled:is(:hover,:focus-visible)) {
+    animation:tavolo-preview-ring .8s ease-in-out infinite alternate;
+  }
+}
