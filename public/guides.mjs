@@ -13,7 +13,8 @@ export const guides={
     ['Fine partita e notazione','Vinci se l’altro rimane senza pezzi o senza mosse legali. Tavolo applica la patta dopo 40 mosse a testa di sole dame senza prese. Nella cronologia le case usano il righello a lettere e numeri. Un trattino indica lo spostamento, × collega i salti di una presa.']
   ],
   scopa:[
-    ['Preparazione e valori','Tavolo distribuisce tre carte a testa e dispone quattro carte scoperte. Quando entrambi finiscono le carte in mano, distribuisce altre tre a testa finché c’è mazzo. Asso vale 1, le carte numeriche il proprio numero, fante 8, cavallo 9 e re 10.'],
+    ['Scopone scientifico · 4 giocatori','I posti 1 e 3 giocano contro 2 e 4. Dieci carte a testa, nessuna sul tavolo. Le prese e i punti sono della coppia. Tavolo gioca a 11 punti.'],
+    ['Scopa classica · 2 giocatori','Tavolo distribuisce tre carte a testa e dispone quattro carte scoperte. Quando entrambi finiscono le carte in mano, distribuisce altre tre a testa finché c’è mazzo. Asso vale 1, le carte numeriche il proprio numero, fante 8, cavallo 9 e re 10.'],
     ['Prese e priorità','Se giochi un 7 e sul tavolo c’è un 7, devi prendere un solo 7, anche con un 3 e un 4 disponibili. Se manca il 7 puoi prendere il 3 e il 4, o un’altra combinazione che faccia 7. Quando ci sono più prese valide, Tavolo ti fa scegliere. Se non puoi prendere, la carta rimane sul tavolo.'],
     ['Scopa e ultime carte','Svuotare il tavolo con una presa vale un punto, salvo nell’ultima giocata della smazzata. Le carte rimaste sul tavolo vanno a chi ha fatto l’ultima presa.'],
     ['Punteggio della smazzata','Oltre alle scope vale un punto ciascuno per maggioranza di carte, maggioranza di denari, settebello (7 di denari) e primiera. Con 20 carte a testa, 5 denari a testa o primiera pari, quel punto non si assegna.'],
@@ -23,6 +24,7 @@ export const guides={
   uno:[
     ['Preparazione e abbinamenti','Inizi con sette carte. Si gioca su una carta scoperta abbinandone colore, numero o azione. Per esempio, sopra un 5 rosso puoi giocare un altro 5 o una carta rossa. Il jolly cambia il colore attivo.'],
     ['Pesca o passa','Puoi pescare anche se hai una carta giocabile. Se la carta pescata è valida, puoi giocare solo quella oppure passare. Se non è valida, il turno passa automaticamente.'],
+    ['Da 3 a 10 giocatori','Inverti cambia il verso di gioco. Salta, +2 e +4 saltano il giocatore successivo nel verso corrente. Con +2 e +4 quel giocatore pesca anche le carte.'],
     ['Azioni in due','Salta e Inverti ti fanno giocare ancora. Con +2 o +4 l’avversario pesca e il turno torna a te. Il +4 richiede che tu non abbia carte del colore attivo. Tavolo controlla questa condizione e ti chiede quale colore impostare.'],
     ['Vittoria','Tavolo annuncia UNO automaticamente quando resta una carta. Vince chi la finisce per primo. Si gioca una mano singola, con una carta numerica iniziale.']
   ],
