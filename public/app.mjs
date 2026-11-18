@@ -91,6 +91,8 @@ function accept(next) {
   if((state?.chatVersion??0)>(next.chatVersion??0)) next={...next,chat:state.chat,chatVersion:state.chatVersion};
   const incoming=next.game.id==='naval'&&state?.game.id==='naval'&&next.game.incoming.length>state.game.incoming.length?next.game.incoming.at(-1):null;
   if(incoming)navalView='own-fleet';
+  const previousRoom=state;
+  const cardOrigins=cardSnapshot(next.game.id);
   notifyClosure(state,next);
   state=next;
   prefix=[];
@@ -98,6 +100,7 @@ function accept(next) {
   seenRooms.set(code,next);
   render();
   if(incoming)showStrike(incoming);
+  animateCards(previousRoom,next,cardOrigins);
 }
 function setConnected(value) {
   if(connected===value)return;
@@ -535,6 +538,68 @@ function opponentHand(g) {
     '<span class="opponent-backs" aria-hidden="true">'+
     ('<span class="opponent-back">'+back+'</span>').repeat(Math.min(count,7))+'</span></span>';
 }
+function playHand(value) {
+  if(!acting()||pending)return;
+    if(game().id==='scopa') {
+      selectedCard=Number(value);
+      const options=game().takes[selectedCard];
+      if(options.length===1)send({card:selectedCard,take:options[0]});
+      else render();
+    } else if(value.startsWith('W:')) {
+      selectedCard=value;
+      showModal('<h2>Scegli il colore</h2><div class="promotion">'+Object.entries(unoColors).filter(([color])=>color!=='W').map(([color,name])=>'<button class="uno-active uno-'+color+'" data-uno-color="'+color+'">'+name+'</button>').join('')+'</div>');
+    } else send({card:value});
+  }
+function cardPiles(g) {
+  const pile=(label,count,attr)=>'<div class="table-pile" '+attr+'><i class="pile-back '+g.id+'" '+(count?'':'hidden')+'></i><span>'+label+' <b>'+count+'</b></span></div>';
+  const stock=pile('Da pescare',g.remaining,'data-stock');
+  const piles=g.id==='scopa'&&g.captureCounts?[state.side,1-state.side].map(side=>pile(side===state.side?'Le tue prese':'Prese avversarie',g.captureCounts[side],'data-pile="'+side+'"')).join(''):'';
+  return '<div class="table-piles">'+stock+piles+'</div>';
+}
+function cardSnapshot(id) {
+  if(!['scopa','uno'].includes(id)||matchMedia('(prefers-reduced-motion: reduce)').matches)return null;
+  const faces=new Map();
+  if(id==='scopa')app.querySelectorAll('.card-center .playing-card').forEach((el,i)=>faces.set(state?.game.table?.[i],el.getBoundingClientRect()));
+  return {faces,own:app.querySelector('.hand')?.getBoundingClientRect(),other:app.querySelector('.opponent-hand')?.getBoundingClientRect()};
+}
+function animateCards(prev,next,origins) {
+  const g=next.game;
+  if(!origins||next.players.length!==2||!app.querySelector('[data-stock]'))return;
+  const old=prev?.game, opening=(!prev&&!g.last)||!!prev&&prev.players.length<2;
+  if(!opening&&(!prev||next.version!==prev.version+1))return;
+  const rect=selector=>app.querySelector(selector)?.getBoundingClientRect();
+  const hand=[0,1].map(side=>rect(side===next.side?'.hand':'.opponent-hand'));
+  const stock=rect('[data-stock]');
+  function fly(from,to,card,delay) {
+    if(!from?.width||!to?.width)return;
+    const el=document.createElement('div');
+    el.className='card-flight';
+    el.setAttribute('aria-hidden','true');
+    el.innerHTML=card===undefined?'<i class="pile-back '+g.id+'"></i>':playingCard(g.id,card);
+    document.body.append(el);
+    const pos=r=>'translate('+ (r.left+r.width/2)+'px,'+(r.top+r.height/2)+'px) translate(-50%,-50%)';
+    const motion=el.animate([{transform:pos(from),opacity:0},{transform:pos(from),opacity:1,offset:.08},{transform:pos(to),opacity:.9,offset:.91},{transform:pos(to),opacity:0}],{duration:430,delay,fill:'both'});
+    motion.onfinish=motion.oncancel=()=>el.remove();
+  }
+  const last=g.last;
+  const changed=!opening&&last&&JSON.stringify(last)!==JSON.stringify(old.last);
+  const played=changed&&(g.id==='scopa'||last.type==='play');
+  if(played) {
+    const table=rect('.card-center');
+    fly(last.side===next.side?origins.own:origins.other,table,last.card,0);
+    if(g.id==='scopa'&&last.take?.length) {
+      const dest=rect('[data-pile="'+last.side+'"]');
+      [last.card,...last.take].forEach((card,i)=>fly(origins.faces.get(card)??table,dest,card,350+i*65));
+    }
+  }
+  const counts=(game)=>next.side===0?[game.hand.length,game.opponentCount]:[game.opponentCount,game.hand.length];
+  const now=counts(g),before=opening?[0,0]:counts(old);
+  now.forEach((n,side)=>{
+    const dealt=g.id==='scopa'&&old&&old.round!==g.round?n:n-before[side]+Number(played&&last.side===side);
+    for(let i=0;i<dealt;i++)fly(stock,hand[side],undefined,(played?550:0)+(2*i+side)*65);
+  });
+}
+
 function cardTable(g) {
   const scopa=g.id==='scopa', deckId=scopa?scopaDeck:'uno';
   const ready=deckCache.has(deckId);
@@ -544,11 +609,11 @@ function cardTable(g) {
   const table=scopa?'<div class="card-line">'+g.table.map(c=>playingCard(g.id,c)).join('')+'</div>':
     '<div class="card-line">'+playingCard(g.id,g.top)+'<span class="uno-active uno-'+g.color+'">'+unoColors[g.color]+'</span></div>';
   const info=scopa?'Smazzata '+g.round+' · Punti '+g.scores[state.side]+'–'+g.scores[1-state.side]:
-    (g.opponentCount===1?'UNO! · ':'')+'Mazzo: '+g.remaining;
+    (g.opponentCount===1?'UNO!':'');
   const deck=scopa?'<label class="card-deck-picker">Mazzo <select id="scopa-deck">'+
     Object.entries(scopaDecks).map(([id,name])=>'<option value="'+id+'" '+(id===scopaDeck?'selected':'')+'>'+name+'</option>').join('')+'</select></label>':'';
-  return '<div class="card-table table-'+g.id+'"'+(scopa?' data-deck="'+scopaDeck+'"':'')+'><div class="card-table-meta"><span>'+info+'</span>'+opponentHand(g)+deck+'</div><div class="card-center"><h3>'+(scopa?'Sul tavolo':'Carta in cima')+'</h3>'+table+'</div>'+
-    '<h3>La tua mano</h3><div class="card-line hand">'+g.hand.map(c=>playingCard(g.id,c,'data-hand="'+c+'"',active&&(scopa||g.playable.includes(c)),selectedCard===c)).join('')+'</div>'+
+  return '<div class="card-table table-'+g.id+'"'+(scopa?' data-deck="'+scopaDeck+'"':'')+'><div class="card-table-meta"><span>'+info+'</span>'+opponentHand(g)+deck+'</div>'+cardPiles(g)+'<div class="card-center"><h3>'+(scopa?'Sul tavolo':'Carta in cima')+'</h3>'+table+'</div>'+
+    '<h3>La tua mano</h3><small>Doppio clic o trascina sul tavolo. Da tastiera, premi Invio.</small><div class="card-line hand">'+g.hand.map(c=>playingCard(g.id,c,'data-hand="'+c+'"',active&&(scopa||g.playable.includes(c)),selectedCard===c)).join('')+'</div>'+
     '<div class="card-moves">'+(scopa?options.map((take,i)=>'<button class="primary" data-take="'+i+'">'+(take.length?'Prendi '+take.map(c=>cardFace(g.id,c).label).join(' + '):'Lascia sul tavolo')+'</button>').join(''):
     (active?'<button class="outline" data-action="'+(g.drawn?'uno-pass':'uno-draw')+'">'+(g.drawn?'Passa':'Pesca')+'</button>':''))+'</div></div>';
 }
@@ -641,7 +706,7 @@ function room() {
     s.closeRequest==null?'':s.closeRequest===s.side?
     '<div class="closure-notice" role="status">Richiesta di chiusura inviata. In attesa di risposta.</div>':
     '<div class="closure-notice"><span role="status">'+escape(s.players[s.closeRequest])+' chiede di chiudere la partita.</span><div><button class="outline" data-action="decline-close" '+disabled+'>Rifiuta</button><button class="primary" data-action="accept-close" '+disabled+'>Accetta</button></div></div>';
-  return '<div class="room-title"><div class="room-heading"><h1>'+meta.name+'</h1>'+(s.roomName?'<small>'+escape(s.roomName)+'</small>':'')+'</div>'+
+  return '<div class="room-title"><div class="room-heading"><h1>'+meta.name+'</h1><small>Giocatori in stanza · '+s.players.length+' / 2</small>'+(s.roomName?'<small>'+escape(s.roomName)+'</small>':'')+'</div>'+
     '<div class="room-tools"><div class="tabs" role="tablist" aria-label="Partita e regole"><button id="tab-play" role="tab" aria-controls="tabpanel" aria-selected="'+(tab==='play')+'" tabindex="'+(tab==='play'?0:-1)+'" data-tab="play">'+icon('board')+'Partita</button><button id="tab-rules" role="tab" aria-controls="tabpanel" aria-selected="'+(tab==='rules')+'" tabindex="'+(tab==='rules'?0:-1)+'" data-tab="rules">'+icon('book')+'Regole</button></div>'+
     '<div class="room-actions" role="group" aria-label="Comandi della partita">'+
     (hasMoveHistory?'<button class="outline" data-action="moves" aria-expanded="'+showMoves+'">'+icon('history')+'Mosse</button>':'')+
@@ -910,7 +975,7 @@ window.addEventListener('pointerup',event=>{
   const play=d.ghost&&overCardTable(d.zone,event.clientX,event.clientY);
   cancelCardGesture();
   if(!d.ghost)return;
-  if(play&&acting())d.source.click();
+  if(play&&acting())playHand(d.source.dataset.hand);
   ignoreClick=true;
   setTimeout(()=>{ignoreClick=false;},0);
 });
@@ -1010,15 +1075,11 @@ app.addEventListener('click',async e=>{
   if(d.create)nameDialog(d.create);
   if(d.info)showModal(rules(d.info));
   if(d.hand!==undefined&&acting()) {
-    if(game().id==='scopa') {
-      selectedCard=Number(d.hand);
-      const options=game().takes[selectedCard];
-      if(options.length===1)send({card:selectedCard,take:options[0]});
-      else render();
-    } else if(d.hand.startsWith('W:')) {
-      selectedCard=d.hand;
-      showModal('<h2>Scegli il colore</h2><div class="promotion">'+Object.entries(unoColors).filter(([color])=>color!=='W').map(([color,name])=>'<button class="uno-active uno-'+color+'" data-uno-color="'+color+'">'+name+'</button>').join('')+'</div>');
-    } else send({card:d.hand});
+    if(e.detail===0||e.pointerType==='touch')playHand(d.hand);
+    else {
+      for(const button of app.querySelectorAll('[data-hand]'))button.classList.toggle('hand-picked',button===b);
+      if(e.detail===2)playHand(d.hand);
+    }
   }
   if(d.take!==undefined&&acting())send({card:selectedCard,take:game().takes[selectedCard][Number(d.take)]});
   if(d.go!==undefined&&acting())send({at:Number(d.go)});
