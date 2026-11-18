@@ -440,3 +440,23 @@ dialog .emoji-grid{top:calc(100% + 5px);bottom:auto}
 .opponent-back+.opponent-back{margin-inline-start:-6px}
 .opponent-back img{display:block;width:100%;height:100%;object-fit:cover}
 .opponent-back i{width:76%;height:50%;border-radius:50%;background:#e43e44;transform:rotate(-32deg)}
+
+/* Keep legal landings visible on both board colors. */
+:is(.chess,.dama) .cell.drop-option { outline:2px dashed #443277; outline-offset:-4px; }
+:is(.chess,.dama) .cell.drop-preview { outline:4px solid #443277; background:#d9cdf8; }
+.drag-origin > * { opacity:.35; }
+.piece-ghost { will-change:transform; }
+@media (prefers-reduced-motion:no-preference) {
+  .piece-ghost { transition:transform 65ms ease-out; }
+  dialog[open] { animation:table-dialog-in 150ms ease-out; }
+  @keyframes table-dialog-in { from { opacity:0; transform:translateY(6px); } }
+}
+.card:focus-within { border-color:var(--accent); }
+dialog::backdrop { background:rgb(28 22 46 / 44%); }
+.chat-panel,.move-panel { overscroll-behavior:contain; }
+@media (pointer:coarse) {
+  .room-tools .tabs button,.panel-close,.dialog-close button { min-height:44px; min-width:44px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  *,*::before,*::after { scroll-behavior:auto!important; animation-duration:.01ms!important; transition-duration:.01ms!important; }
+}
