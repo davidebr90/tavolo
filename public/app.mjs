@@ -433,14 +433,15 @@ function checker(g) {
       content=id==='tris'?'<span class="mark p'+v+'">'+(v===1?'×':'○')+'</span>':'<span class="disc p'+((v-1)%2+1)+'">'+(v>=3?'♛':'')+'</span>';
       label+=' '+catalog[id].players[(v-1)%2];
     }
-    const choose=acting()&&(viable || (flip&&moves.some(m=>(chess?m.from:m.path[0])===i)));
+    const movable=flip&&moves.some(m=>(chess?m.from:m.path[0])===i);
+    const choose=acting()&&(viable||movable);
     if(target) {
       const capture=chess?Boolean(v||moves.some(m=>m.from===prefix[0]&&m.to===i&&m.ep)):
         id==='dama'&&Math.abs(i%8-prefix.at(-1)%8)===2;
       content+='<span aria-hidden="true" class="chess-target '+(capture?'chess-capture':'')+'"></span>';
       label+=capture?' · Cattura disponibile':' · Destinazione disponibile';
     }
-    return cell(content,style,'data-cell="'+i+'"',id==='four'?'Colonna '+(i%7+1):label,choose);
+    return cell(content,style+(movable?' draggable-piece':''),'data-cell="'+i+'"',id==='four'?'Colonna '+(i%7+1):label,choose);
   }).join('');
   const boardHtml='<div class="board '+id+'">'+cells+'</div>';
   return flip||id==='reversi'?boardRuler(boardHtml,mayReverse?'hgfedcba':'abcdefgh',mayReverse?'12345678':'87654321'):boardHtml;
@@ -934,6 +935,7 @@ app.addEventListener('pointerdown',e=>{
   marker.style.setProperty('--ship-length',sizes()[activeShip()]);
   document.body.append(marker);
   drag={marker,pointer:e.pointerId};
+  syncGrabCursor();
   moveShip(e);
 });
 function moveShip(e) {
@@ -950,9 +952,14 @@ function finishDrag(e) {
   const at=target?Number(target.dataset.naval):null;
   drag.marker.remove();
   drag=null;
+  syncGrabCursor();
   preview(null);
   if(e.type==='pointerup'&&at!==null)placeShip(at);
 }
+window.addEventListener('blur',()=>{
+  if(!drag)return;
+  drag.marker.remove();drag=null;syncGrabCursor();preview(null);
+});
 window.addEventListener('pointerup',finishDrag);
 window.addEventListener('pointercancel',finishDrag);
 function previewGroup(button) {
@@ -983,6 +990,9 @@ for(const type of ['pointerover','focusin','pointerout','focusout']) {
     previewGroup(type==='focusin'||type==='pointerover'?button:null);
   });
 }
+function syncGrabCursor() {
+  document.documentElement.classList.toggle('holding-piece',Boolean(drag||boardDrag||cardGesture));
+}
 function cancelCardGesture() {
   if(!cardGesture)return;
   const {ghost,zone,source,frame}=cardGesture;
@@ -991,6 +1001,7 @@ function cancelCardGesture() {
   zone.classList.remove('card-drop-ready','card-drop-hover');
   source.classList.remove('card-in-flight');
   cardGesture=null;
+  syncGrabCursor();
 }
 function overCardTable(zone,x,y) {
   return zone.contains(document.elementFromPoint(x,y));
@@ -1000,6 +1011,7 @@ app.addEventListener('pointerdown',event=>{
   if(!source||cardGesture||event.button!==0||!event.isPrimary)return;
   const zone=source.closest('.card-table').querySelector('.card-center');
   cardGesture={source,zone,id:event.pointerId,startX:event.clientX,startY:event.clientY,frame:0};
+  syncGrabCursor();
 });
 window.addEventListener('pointermove',event=>{
   const d=cardGesture;
@@ -1052,6 +1064,7 @@ function clearBoardDrag() {
   boardDrag.target?.classList.remove('drop-preview');
   for(const cell of boardDrag.targets)cell.classList.remove('drop-option');
   boardDrag=null;
+  syncGrabCursor();
 }
 app.addEventListener('pointerdown',e=>{
   const source=e.target.closest('.chess .cell:enabled,.dama .cell:enabled');
@@ -1066,6 +1079,7 @@ app.addEventListener('pointerdown',e=>{
   const board=source.closest('.chess,.dama');
   const targets=new Set([...board.querySelectorAll('[data-cell]')].filter(cell=>destinations.has(Number(cell.dataset.cell))));
   boardDrag={pointer:e.pointerId,from,x:e.clientX,y:e.clientY,source,targets,marker:null,frame:0};
+  syncGrabCursor();
 });
 function dragTarget(x,y) {
   const cell=document.elementFromPoint(x,y)?.closest('[data-cell]');
