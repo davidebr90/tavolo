@@ -565,25 +565,27 @@ app.addEventListener('change',event=>{
   localStorage.setItem('tavolo:scopa-deck',value);
   render();
 });
+function seatHasTurn(room,seat) {
+  const g=room.game;
+  return !room.closed&&room.players.length===(room.maxPlayers??2)&&g.result===null&&g.turn===seat&&
+    (g.id!=='naval'||g.ready.every(Boolean));
+}
 function opponentHand(g) {
-  if(state.maxPlayers>2) {
-    const free=state.maxPlayers-state.players.length;
-    const hands=state.players.map((name,seat)=>{
-      if(seat===state.side)return '';
-      const count=g.handCounts[seat];
-      const current=!free&&g.result===null&&g.turn===seat;
-      const backs='<span class="mini-hand" aria-hidden="true">'+('<i class="pile-back '+g.id+'"></i>').repeat(Math.min(count,3))+'</span>';
-      return '<li class="hand-seat" data-other="'+seat+'"'+(current?' aria-current="true"':'')+'>'+backs+
-        '<span class="hand-seat-info"><strong>'+escape(name)+'</strong><small>'+count+(count===1?' carta':' carte')+(current?' · di turno':'')+'</small></span></li>';
-    }).join('');
-    const waiting=free?'<li class="hand-vacancies"><span aria-hidden="true">♧</span>'+free+(free===1?' posto libero':' posti liberi')+'</li>':'';
-    return '<ul class="other-hands" aria-label="Mani degli altri giocatori">'+hands+waiting+'</ul>';
-  }
-  const count=g.opponentCount;
-  const back=g.id==='scopa'?'<img src="/scopa-back.webp" alt="" width="250" height="350">':'<i></i>';
-  return '<span class="opponent-hand"><span>Carte avversario: '+count+'</span>'+
-    '<span class="opponent-backs" aria-hidden="true">'+
-    ('<span class="opponent-back">'+back+'</span>').repeat(Math.min(count,7))+'</span></span>';
+  const capacity=state.maxPlayers??2;
+  const seats=Array.from({length:capacity},(_,seat)=>{
+    const occupied=seat<state.players.length;
+    const own=seat===state.side;
+    const count=g.handCounts?.[seat]??(own?g.hand.length:g.opponentCount);
+    const current=seatHasTurn(state,seat);
+    const title=occupied?displayNickname(state.players[seat],state.playerMarkup?.[seat]):'Posto '+(seat+1);
+    const details=occupied?(count===1?'1 carta':count+' carte'):'Libero';
+    const team=capacity===4&&g.id==='scopa'?' · Squadra '+(seat%2+1):'';
+    const backs='<span class="mini-hand" aria-hidden="true">'+('<i class="pile-back '+g.id+'"></i>').repeat(occupied?Math.min(3,count):3)+'</span>';
+    return '<li class="hand-seat'+(occupied?'':' seat-vacant')+'" data-other="'+seat+'"'+(current?' aria-current="true"':'')+'>'+backs+
+      '<span class="hand-seat-info"><strong>'+title+(own?' (tu)':'')+'</strong><small>'+details+team+'</small>'+
+      (current?'<b class="seat-turn">Di turno</b>':'')+'</span></li>';
+  }).join('');
+  return '<ul class="other-hands seat-gallery" aria-label="Giocatori al tavolo">'+seats+'</ul>';
 }
 function playHand(value) {
   if(!acting()||pending)return;
@@ -615,7 +617,7 @@ function animateCards(prev,next,origins) {
   const old=prev?.game, opening=(!prev&&!g.last)||!!prev&&prev.players.length<(next.maxPlayers??2);
   if(!opening&&(!prev||next.version!==prev.version+1))return;
   const rect=selector=>app.querySelector(selector)?.getBoundingClientRect();
-  const hand=next.players.map((_,side)=>rect(side===next.side?'.hand':(next.maxPlayers>2?'[data-other="'+side+'"]':'.opponent-hand')));
+  const hand=next.players.map((_,side)=>rect(side===next.side?'.hand':'[data-other="'+side+'"]'));
   const stock=rect('[data-stock]');
   function fly(from,to,card,delay) {
     if(!from?.width||!to?.width)return;
@@ -765,7 +767,7 @@ function room() {
     (!s.closed&&g.result===null&&s.closeRequest==null?'<button class="outline close-game" data-action="close-game" aria-label="Chiudi partita" title="Chiudi partita" '+disabled+'>'+icon('close')+'<span>Chiudi partita</span></button>':'')+'</div></div></div>'+
     closure+'<div class="room-layout '+(chatOpen?'with-chat ':'')+(showMoves?'with-moves':'')+'">'+(showMoves?movePanel(g):'')+
     '<div id="tabpanel" role="tabpanel" aria-labelledby="tab-'+tab+'">'+(tab==='rules'?rules(g.id):
-    '<div class="match"><div class="players">'+Array.from({length:s.maxPlayers??2},(_,i)=>i).map(i=>'<div class="player '+(g.turn===i&&g.result===null&&s.players.length===(s.maxPlayers??2)?'current':'')+'"><i class="seat-mark seat-'+i+'" aria-hidden="true"></i><strong title="'+escape(s.players[i]??'Posto libero')+'">'+displayNickname(s.players[i]??'Posto libero',s.playerMarkup?.[i])+(i===s.side?' (tu)':'')+'</strong><small>'+(s.maxPlayers>2?(g.id==='scopa'?'Squadra '+(i%2+1):'Posto '+(i+1)):meta.players[i])+'</small></div>').join('')+'</div>'+
+    '<div class="match"><div class="players">'+Array.from({length:s.maxPlayers??2},(_,i)=>i).map(i=>'<div class="player '+(seatHasTurn(s,i)?'current':'')+'"><i class="seat-mark seat-'+i+'" aria-hidden="true"></i><strong title="'+escape(s.players[i]??'Posto libero')+'">'+displayNickname(s.players[i]??'Posto libero',s.playerMarkup?.[i])+(i===s.side?' (tu)':'')+'</strong><small>'+(s.maxPlayers>2?(g.id==='scopa'?'Squadra '+(i%2+1):'Posto '+(i+1)):meta.players[i])+'</small></div>').join('')+'</div>'+
     '<div class="banner '+tone+'" role="status"><i></i>'+escape(wording)+'</div>'+pass+
     (g.id==='naval'?naval(g):['scopa','uno'].includes(g.id)?cardTable(g):['go','dots','nim','backgammon'].includes(g.id)?strategyBoard(g):checker(g))+
     '<div class="match-actions">'+(g.canDraw&&acting()?'<button class="outline" data-action="draw">'+icon('draw')+'Richiedi patta</button>':'')+
