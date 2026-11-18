@@ -41,7 +41,8 @@ export function start(id,options={}) {
   if(id==='naval') {
     const {size=10,ships=5}=options??{};
     if(![8,10,12].includes(size)||![3,4,5,6].includes(ships)) throw Error('Configurazione della flotta non valida.');
-    return {...s,size,lengths:[...lengths,2].slice(0,ships),fleets:[null,null],shots:[[],[]]};
+    const fleetLengths=ships===6?[...lengths,1]:Array.from({length:ships},(_,i)=>ships-i);
+    return {...s,size,lengths:fleetLengths,fleets:[null,null],shots:[[],[]]};
   }
   s.board=grid(({tris:9,four:42})[id]||64);
   if(id==='reversi') for (const [i,p] of [[27,2],[28,1],[35,1],[36,2]]) s.board[i]=p;
