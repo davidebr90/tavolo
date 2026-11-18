@@ -594,3 +594,8 @@ dialog::backdrop { background:rgb(28 22 46 / 44%); }
 .navy-grid .cell.hull:not(.ghost-ok):not(.ghost-bad) { background:var(--vessel); }
 .fleet-row .fleet-segments b:not(.damage) { background:var(--vessel);color:#172339; }
 .fleet-row { border-inline-start:4px solid var(--vessel); }
+
+.room-capacity { display:grid;gap:4px;margin-block:12px; }
+.room-capacity select { display:block;max-width:100%;font:inherit; }
+.room-capacity small { color:var(--muted); }
+.other-hands { display:flex;flex-wrap:wrap;gap:6px 14px; }
