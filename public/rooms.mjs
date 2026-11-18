@@ -10,10 +10,10 @@ export function savedSeats() {
 export function roomStatus(state) {
   const {game,players,side}=state;
   if(state.closed) return {label:'Partita chiusa',tone:'done'};
-  if(game.result!==null) return {label:game.result==='draw'?'Pareggio':game.result===side?'Hai vinto':'Partita conclusa',tone:'done'};
+  if(game.result!==null) return {label:game.result==='draw'?'Pareggio':game.result===(game.id==='scopa'?side%2:side)?'Hai vinto':'Partita conclusa',tone:'done'};
   if(state.closeRequest!=null) return state.closeRequest===side
     ? {label:'Chiusura in attesa',tone:'waiting'} : {label:'Rispondi alla chiusura',tone:'your'};
-  if(players.length<2) return {label:'In attesa',tone:'waiting'};
+  if(players.length<(state.maxPlayers??2)) return {label:'In attesa',tone:'waiting'};
   if(game.id==='naval'&&!game.ready.every(Boolean)) return game.ready[side]
     ? {label:'Attesa flotta',tone:'waiting'} : {label:'Schiera la flotta',tone:'your'};
   return game.turn===side?{label:'Tocca a te',tone:'your'}:{label:'Turno avversario',tone:'other'};
