@@ -547,3 +547,20 @@ dialog::backdrop { background:rgb(28 22 46 / 44%); }
 .card-flight .playing-card,.card-flight .pile-back { width:44px;height:62px;display:block;overflow:hidden; }
 .card-flight img,.card-flight svg { width:100%;height:100%;object-fit:contain; }
 .hand-picked { outline:3px solid var(--accent);outline-offset:-3px; }
+
+.card-help { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.card-help button[aria-pressed=true] { outline:2px solid var(--accent); }
+.caption-card { display:inline-grid; justify-items:center; gap:3px; flex:none; }
+.caption-card small { color:#302c43; background:white; border-radius:4px; padding:1px 6px; }
+.wild-color { display:inline-block;width:18px;height:18px;border-radius:50%; }
+.ship-sector { position:relative; min-width:0; aspect-ratio:1; }
+.ship-sector>.cell { width:100%;height:100%; }
+.turn-ship { display:none; position:absolute; bottom:65%; left:0; z-index:5; background:white; border-radius:4px; box-shadow:0 1px 5px #29334c66; }
+.ship-sector:is(:hover,:focus-within) { z-index:4; }
+.ship-sector:is(:hover,:focus-within) .turn-ship { display:flex; }
+.ship-sector:nth-child(-n+10) .turn-ship { top:65%;bottom:auto; }
+.ship-sector:has(+ :last-child) .turn-ship,.ship-sector:last-child .turn-ship { left:auto;right:0; }
+.turn-ship button { padding:1px 4px; border:0; background:white; color:#3b3564; font-size:1rem; }
+.sea-chart:has(.turn-ship) .navy-grid { overflow:visible; }
+.sector-number { position:absolute;top:2px;left:2px;font-size:clamp(8px,1vw,11px);line-height:1;color:#182c49; }
+.fleet-segments b { min-width:15px;width:auto;padding:0 2px;font-size:10px; }
