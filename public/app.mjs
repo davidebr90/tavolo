@@ -282,17 +282,31 @@ function paintRooms() {
   const focus=document.activeElement?.getAttribute('href');
   seats.sort((a,b)=>{
     const rank=seat=>{const data=seenRooms.get(seat.code);return data?({your:0,other:1,waiting:2,done:3})[roomStatus(data).tone]:4;};
-    return rank(a)-rank(b);
+    return rank(a)-rank(b)||(seenRooms.get(b.code)?.createdAt??0)-(seenRooms.get(a.code)?.createdAt??0)||a.code.localeCompare(b.code);
   });
   function row({code:key}) {
     const s=seenRooms.get(key), status=s?roomStatus(s):{tone:'waiting',label:unavailable.has(key)?'Non disponibile':'Connessione…'};
     const unread=s?unreadCount(key,s):0;
     const date=Number.isFinite(s?.createdAt)?new Date(s.createdAt):null;
     const created=date&&Number.isFinite(date.getTime())?'<time datetime="'+date.toISOString()+'">'+escape(new Intl.DateTimeFormat('it-IT',{dateStyle:'short',timeStyle:'short'}).format(date))+'</time>':'<span>Data non disponibile</span>';
-    const players=s?s.players.map((name,i)=>displayNickname(name,s.playerMarkup?.[i])+(i===s.side?' (tu)':'')).concat(Array(Math.max(0,(s.maxPlayers??2)-s.players.length)).fill('Posto libero')).join(' · '):'';
-    return '<div class="saved-room"><a href="/?stanza='+key+'"><span><strong>'+escape(s?catalog[s.game.id].name:'Stanza')+'</strong><small>'+escape(s?.roomName?s.roomName+' · #'+key.slice(-8):'Stanza #'+key.slice(-8))+'</small>'+(s?'<small>'+players+'</small><small class="room-created">Creata il '+created+'</small>':'')+'</span><span class="room-status '+status.tone+'">'+status.label+'</span>'+(unread?'<span class="unread-pill" aria-label="'+unread+' messaggi non letti">'+icon('chat')+unread+'</span>':'')+'</a>'+
-      (status.tone==='done'||unavailable.has(key)?'<button class="link" data-dismiss="'+key+'">Rimuovi</button>':
-        s?.closeRequest!=null?'':'<button class="outline room-close" data-close-room="'+key+'" aria-label="'+(s?.requiresConsent?'Chiedi di chiudere la partita':'Chiudi partita')+'" '+(closingRooms.has(key)?'disabled aria-busy="true"':'')+'><span aria-hidden="true">×</span></button>')+'</div>';
+    const game=s&&catalog[s.game.id];
+    const title=s?.game.id==='scopa'&&s.maxPlayers===4?'Scopone scientifico':game?.name??'Stanza';
+    const capacity=s?.maxPlayers??2, free=s?Math.max(0,capacity-s.players.length):0;
+    const active=s&&!s.closed&&s.game.result===null;
+    const people=s?s.players.map((name,i)=>{
+      const turn=active&&free===0&&s.game.turn===i&&s.closeRequest==null&&(s.game.id!=='naval'||s.game.ready.every(Boolean));
+      return '<li class="room-person">'+icon('user')+displayNickname(name,s.playerMarkup?.[i])+(i===s.side?' <em>Tu</em>':'')+(turn?' <em>Di turno</em>':'')+'</li>';
+    }).join(''):'';
+    const seats=s?'<div class="room-seats"><span>Giocatori <b>'+s.players.length+' / '+capacity+'</b></span>'+
+      (active&&free?'<small>'+free+(free===1?' posto libero':' posti liberi')+'</small>':'')+'</div><ul class="room-people">'+people+'</ul>':'';
+    const remove=status.tone==='done'||unavailable.has(key);
+    const action=remove?'<button class="link" data-dismiss="'+key+'">Rimuovi</button>':
+      s&&s.closeRequest==null?'<button class="link room-manage" data-close-room="'+key+'" '+(closingRooms.has(key)?'disabled aria-busy="true"':'')+'>Chiudi partita</button>':'';
+    const artwork=game?'<span class="room-thumbnail '+game.color+'" aria-hidden="true"><span>'+art(s.game.id,game)+'</span></span>':'';
+    const open=unavailable.has(key)?'':'<a class="primary" href="/?stanza='+key+'">'+(remove?'Vedi partita':'Apri stanza')+'</a>';
+    return '<article class="room-summary"><header>'+artwork+'<div><h2>'+escape(s?.roomName||title)+'</h2><small>'+escape((s?.roomName?title+' · ':'')+'#'+key.slice(-8))+'</small></div>'+
+      '<span class="room-status '+status.tone+'">'+status.label+'</span></header>'+seats+
+      '<footer><div class="room-record">'+(date?'Creata il '+created:'')+(unread?' <span class="unread-pill">'+icon('chat')+unread+' non letti</span>':'')+'</div><div class="room-actions">'+action+open+'</div></footer></article>';
   }
   const finished=entry=>unavailable.has(entry.code)||(seenRooms.has(entry.code)&&roomStatus(seenRooms.get(entry.code)).tone==='done');
   const active=seats.filter(entry=>!finished(entry)&&(!attentionOnly||needsAttention(entry.code))), recent=seats.filter(finished);
