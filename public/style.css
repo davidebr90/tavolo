@@ -677,3 +677,20 @@ html.holding-piece,html.holding-piece * { cursor:grabbing !important; }
   .capture-stack { position:static; }
   .capture-stack .capture-preview { left:0;right:0;width:auto; }
 }
+
+.room-title.phase-header { display:grid;grid-template-columns:minmax(0,1fr);gap:0;margin:12px 0;background:white;border:1px solid var(--line);border-radius:14px; }
+.room-identity { display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px; }
+.room-byline { display:flex;align-items:baseline;gap:4px 12px;flex-wrap:wrap;font-size:.85rem;color:var(--muted); }
+.room-byline strong { color:var(--ink);overflow-wrap:anywhere; }
+.room-invite.primary { display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding-inline:18px;flex:none;background:var(--accent);color:white; }
+.room-invite svg { width:18px;height:18px; }
+.phase-header .room-tools { padding:7px 12px;justify-content:space-between;gap:6px 12px;border-top:1px solid var(--line);background:#faf9fc;border-radius:0 0 14px 14px; }
+.phase-header .room-actions { margin-left:0;flex-wrap:wrap; }
+.phase-header .close-game { color:#813449;font-weight:600; }
+.phase-header .close-game:hover { background:#f8eaee; }
+.match>.banner:first-child { margin-top:0;margin-bottom:8px; }
+@media(max-width:480px) {
+  .room-identity { flex-wrap:wrap;padding:10px; }
+  .room-invite.primary { flex:1 0 100%; }
+  .phase-header .room-tools { padding:6px; }
+}
