@@ -2,12 +2,14 @@ import {closeSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, re
 import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {sessionLifetime} from './room.mjs';
+import {profileLifetime} from './profiles.mjs';
 
-const roomCode=/^[a-f0-9]{24}$/;
-export function localRooms(directory) {
+// JSON files named by id, written atomically and pruned after `lifetime` without updates.
+function localStore(directory,{length,lifetime,label}) {
+  const valid=new RegExp('^[a-f0-9]{'+length+'}$');
   mkdirSync(directory,{recursive:true,mode:0o700});
   function file(code) {
-    if(!roomCode.test(code))throw Error('Codice stanza non valido.');
+    if(!valid.test(code))throw Error(label);
     return join(directory,code+'.json');
   }
   function read(code) {
@@ -28,19 +30,21 @@ export function localRooms(directory) {
   function prune(now=Date.now()) {
     const expired=[];
     for(const name of readdirSync(directory)) {
-      const code=/^([a-f0-9]{24})\.json$/.exec(name)?.[1];
+      const code=new RegExp('^([a-f0-9]{'+length+'})\\.json$').exec(name)?.[1];
       if(code) {
         const room=read(code);
-        if(room&&now-room.updatedAt>=sessionLifetime) {
+        if(room&&now-room.updatedAt>=lifetime) {
           rmSync(file(code),{force:true});
           expired.push(code);
         }
-      } else if(/^[a-f0-9]{24}\.json\.[a-f0-9-]{36}\.tmp$/.test(name)) {
+      } else if(new RegExp('^[a-f0-9]{'+length+'}\\.json\\.[a-f0-9-]{36}\\.tmp$').test(name)) {
         const path=join(directory,name);
-        if(now-statSync(path).mtimeMs>=sessionLifetime)rmSync(path,{force:true});
+        if(now-statSync(path).mtimeMs>=lifetime)rmSync(path,{force:true});
       }
     }
     return expired;
   }
   return {read,save,prune};
 }
+export const localRooms=directory=>localStore(directory,{length:24,lifetime:sessionLifetime,label:'Codice stanza non valido.'});
+export const localProfiles=directory=>localStore(directory,{length:64,lifetime:profileLifetime,label:'Profilo non valido.'});

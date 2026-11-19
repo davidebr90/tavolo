@@ -1,12 +1,20 @@
 import { DurableObject } from 'cloudflare:workers';
 import { route, answer, handle, validToken, settings } from './service.mjs';
 import { snapshot, sessionLifetime } from './room.mjs';
+import { handleProfile, profileId, profileLifetime, validProfileKey } from './profiles.mjs';
 
 export default {
   async fetch(request,env) {
     const url=new URL(request.url);
     if(!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     if(url.pathname==='/api/config') return answer(settings('ws',env.CF_VERSION_METADATA?.timestamp));
+    if(url.pathname==='/api/profile') {
+      const origin=request.headers.get('Origin');
+      if(origin && origin!==url.origin) return answer({error:'Origine non autorizzata.'},403);
+      const key=request.headers.get('Authorization')?.replace(/^Bearer /,'');
+      if(!validProfileKey(key)) return answer({error:'Profilo non valido.'},401);
+      return env.PROFILES.getByName(await profileId(key)).fetch(request);
+    }
     const match=route.exec(url.pathname);
     if(!match) return answer({error:'Percorso sconosciuto.'},404);
     const origin=request.headers.get('Origin');
@@ -67,5 +75,29 @@ export class GameRoom extends DurableObject {
   }
   webSocketClose(socket,code) {
     socket.close(code===1005||code===1006?1000:code,'');
+  }
+}
+export class PlayerProfile extends DurableObject {
+  constructor(ctx,env) {
+    super(ctx,env);
+    this.sql=ctx.storage.sql;
+    this.sql.exec('CREATE TABLE IF NOT EXISTS profile (id INTEGER PRIMARY KEY, json TEXT NOT NULL)');
+  }
+  read() {
+    const row=this.sql.exec('SELECT json FROM profile WHERE id=1').toArray()[0];
+    return row?JSON.parse(row.json):undefined;
+  }
+  fetch(request) {
+    return handleProfile(request,{read:()=>this.read(),save:(id,profile)=>{
+      this.sql.exec('INSERT OR REPLACE INTO profile (id,json) VALUES (1,?)',JSON.stringify(profile));
+      this.ctx.waitUntil(this.ctx.storage.setAlarm(profile.updatedAt+profileLifetime));
+    }});
+  }
+  async alarm() {
+    const profile=this.read();
+    if(!profile)return;
+    const expires=(profile.updatedAt??0)+profileLifetime;
+    if(expires>Date.now()) {await this.ctx.storage.setAlarm(expires);return;}
+    this.sql.exec('DELETE FROM profile');
   }
 }

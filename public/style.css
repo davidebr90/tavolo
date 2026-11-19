@@ -110,6 +110,7 @@ input[type=checkbox]{width:17px;height:17px;accent-color:var(--brass)}
 #turn-count{position:relative;display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--vermilion);color:#fff;font-size:.72rem;font-weight:800;box-shadow:0 0 0 0 rgb(236 91 63 / 60%);animation:ping-red 1.8s ease-out infinite}
 #turn-count[hidden],#join-room[hidden]{display:none}
 .fx-toggle{min-width:36px;padding-inline:9px}
+.profile-button .profile-name{display:inline-block;max-width:14ch;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
 .fx-toggle .fx-glyph{display:inline-block;font-size:1rem;line-height:1;transition:transform .6s var(--ease-spring)}
 .fx-toggle[aria-pressed=true] .fx-glyph{color:var(--brass-hi);text-shadow:0 0 10px var(--brass);animation:twinkle 3.2s ease-in-out infinite}
 .fx-toggle:hover .fx-glyph{transform:rotate(90deg) scale(1.15)}
@@ -816,6 +817,41 @@ dialog p{margin-bottom:12px;color:var(--muted)}
 .room-capacity select{display:block;max-width:100%;margin-top:4px}
 .room-capacity small{color:var(--muted)}
 .promotion{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+/* Profile dialog */
+.profile-dialog{display:grid;gap:14px}
+.profile-dialog h2{margin-bottom:0}
+.profile-dialog h3{font-size:1.05rem;margin-top:4px}
+.profile-lead{margin:0!important;color:var(--muted)}
+.profile-card{display:flex;align-items:flex-start;gap:14px;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.profile-card .avatar{width:46px;height:46px;font-size:1.1rem}
+.profile-name-form{flex:1;min-width:0}
+.profile-name-form small{display:block;margin-top:6px;color:var(--faint);font-size:.78rem}
+.profile-link-box{display:grid;gap:8px;padding:14px;border:1px solid rgb(217 179 102 / 40%);border-radius:16px;background:linear-gradient(135deg,rgb(217 179 102 / 14%),rgb(217 179 102 / 4%))}
+.profile-label{font-weight:700}
+.profile-link-box code,.profile-link-box input{display:block;padding:8px 10px;border-radius:10px;background:rgb(0 0 0 / 30%);border:1px solid var(--line);font:600 .84rem var(--mono);color:var(--brass-hi);overflow-wrap:anywhere}
+.profile-link-actions{display:flex;flex-wrap:wrap;gap:8px}
+.profile-warning{margin:0!important;font-size:.82rem;color:var(--muted)}
+.profile-warning::before{content:'!';display:inline-grid;place-items:center;width:18px;height:18px;margin-right:6px;border-radius:50%;background:rgb(255 139 120 / 18%);color:var(--stop);font-weight:800;font-size:.72rem}
+.profile-empty{display:grid;gap:10px;justify-items:start;padding:14px;border:1px dashed var(--line-strong);border-radius:16px}
+.profile-empty p{margin:0!important}
+.profile-list{display:grid;gap:6px;list-style:none;margin:0;padding:0}
+.profile-list li{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.profile-list li[aria-current=true]{border-color:var(--brass);background:linear-gradient(90deg,rgb(217 179 102 / 14%),transparent)}
+.profile-list li>span:nth-child(2){display:grid;flex:1;min-width:0;line-height:1.25}
+.profile-list strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profile-list small{color:var(--faint);font-size:.76rem}
+.profile-more{border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.profile-more summary{cursor:pointer;font-weight:700;color:var(--brass-hi)}
+.profile-more summary::marker{color:var(--brass)}
+.profile-more form{margin-top:10px}
+.profile-more small{display:block;margin-top:6px;color:var(--faint);font-size:.78rem}
+.profile-footer{display:flex;justify-content:flex-end}
+.profile-error:empty{display:none}
+dialog:has(.profile-dialog){width:min(600px,calc(100% - 28px));overflow:auto}
+.profile-hint{display:inline-flex;align-items:center;gap:8px;margin-top:10px;padding:7px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--muted);font:600 .82rem var(--text);text-align:left;transition:border-color .2s,background .2s}
+.profile-hint:hover{border-color:var(--brass);background:rgb(217 179 102 / 10%);color:var(--ink)}
+.profile-hint strong{color:var(--brass-hi)}
+.profile-hint .ui-icon{color:var(--brass)}
 .promotion .outline{flex-direction:column;min-width:86px;padding:12px 10px;font-size:.82rem}
 .promotion .glyph{font:2.6rem/1 'Segoe UI Symbol','DejaVu Sans',serif;color:var(--cream);text-shadow:0 4px 8px #000a;transition:transform .35s var(--ease-spring)}
 .promotion .outline:hover .glyph{transform:translateY(-4px) scale(1.12)}

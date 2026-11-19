@@ -6,11 +6,12 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { route, answer, handle, settings } from './src/service.mjs';
-import { localRooms } from './src/local-rooms.mjs';
+import { localRooms, localProfiles } from './src/local-rooms.mjs';
+import { handleProfile } from './src/profiles.mjs';
 
 const instance=createHash('sha256').update(import.meta.url).digest('hex').slice(0,16);
 const directory=process.env.TAVOLO_ROOM_DIR??join(tmpdir(),'Tavolo',instance);
-const rooms=localRooms(directory), feeds=new Map();
+const rooms=localRooms(directory), profiles=localProfiles(join(directory,'profili')), feeds=new Map();
 // Locally the core was last updated when a file in src/ last changed on disk.
 const core=new URL('./src/',import.meta.url);
 const coreUpdated=new Date(Math.max(...readdirSync(core).map(name=>statSync(new URL(name,core)).mtimeMs))).toISOString();
@@ -53,6 +54,14 @@ const server=createServer(async (req,res)=>{
       res.end(await response.text());
       return;
     }
+    if(url.pathname==='/api/profile') {
+      const init={method:req.method,headers:new Headers(req.headers)};
+      if(req.method==='POST') Object.assign(init,{body:Readable.toWeb(req),duplex:'half'});
+      const response=await handleProfile(new Request(url,init),{read:id=>profiles.read(id),save:(id,profile)=>profiles.save(id,profile)});
+      res.writeHead(response.status,Object.fromEntries(response.headers));
+      res.end(await response.text());
+      return;
+    }
     if(url.pathname==='/api/config') {res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(settings('sse',coreUpdated)));return;}
     const name=url.pathname==='/'?'index.html':url.pathname.slice(1);
     if(!/^[\w.-]+\.(html|css|mjs|webp)$/.test(name)) {res.writeHead(404).end();return;}
@@ -63,6 +72,7 @@ const server=createServer(async (req,res)=>{
 import { snapshot as snapshotFor, sessionLifetime } from './src/room.mjs';
 function prune() {
   try {
+    profiles.prune();
     for(const code of rooms.prune()) {
       for(const listener of feeds.get(code)??[]) listener.end();
       feeds.delete(code);

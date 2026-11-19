@@ -10,6 +10,7 @@ import { version, updatedAt } from './version.mjs';
 import { shipTiles, shipSectors as fleetSectors, rotateShip } from './fleet.mjs';
 import { seatStat, turnNotes, chessMaterial } from './stats.mjs';
 import * as rich from './rich-editor.mjs';
+import * as personal from './profile.mjs';
 
 const app=document.querySelector('#app'), modal=document.querySelector('#modal'), joinButton=document.querySelector('#join-room');
 const codePattern=/^[a-f0-9]{24}$/;
@@ -239,6 +240,7 @@ function nameDialog(gameId) {
     code=room;token=seat;
     localStorage.setItem('tavolo:'+code,token);
     localStorage.setItem('tavolo:nickname',name);
+    profileAdd(code,token);
     history.replaceState({},'',href());
     setConnected(true);
     accept(next);
@@ -268,6 +270,7 @@ function renameDialog() {
       } catch(error) {if(error.status!==404)throw error;}
     }));
     localStorage.setItem('tavolo:nickname',name);
+    profileUpdate({nickname:name});
     paintRooms();
     if(results.some(result=>result.status==='rejected'))throw Error('Alcune stanze non sono state aggiornate. Riprova quando la connessione è disponibile.');
     toast('Nickname aggiornato.');
@@ -298,7 +301,7 @@ function lobby() {
   const requested=new URLSearchParams(location.search).get('vista');
   const dashboard=requested==='partite'||(!requested&&seats.length>0);
   const nav='<nav class="dashboard-nav" aria-label="Menu Home"><a href="/?vista=partite" '+(dashboard?'aria-current="page"':'')+'>Partite in corso</a><a href="/?vista=giochi" '+(!dashboard?'aria-current="page"':'')+'>Esplora giochi</a></nav>';
-  if(dashboard) return nav+'<section class="catalog"><div class="section-head"><div><span class="eyebrow">Le tue stanze</span><h1>Partite <em>in corso</em></h1><p>Riprendi una stanza o controlla a chi tocca.</p></div><a class="primary" href="/?vista=giochi">'+icon('plus')+'Nuova partita</a></div><label class="room-filter"><input type="checkbox" id="attention-only" '+(attentionOnly?'checked':'')+'> Solo partite da seguire</label><div id="saved-rooms"></div></section>';
+  if(dashboard) return nav+'<section class="catalog"><div class="section-head"><div><span class="eyebrow">Le tue stanze</span><h1>Partite <em>in corso</em></h1><p>Riprendi una stanza o controlla a chi tocca.</p>'+profileHint()+'</div><a class="primary" href="/?vista=giochi">'+icon('plus')+'Nuova partita</a></div><label class="room-filter"><input type="checkbox" id="attention-only" '+(attentionOnly?'checked':'')+'> Solo partite da seguire</label><div id="saved-rooms"></div></section>';
   return nav+'<section class="catalog" aria-labelledby="catalog-title"><div class="section-head"><div><span class="eyebrow">Sala giochi · '+Object.keys(catalog).length+' tavoli</span><h1 id="catalog-title">Scegli il <em>gioco</em></h1><p>Crea una stanza e invita chi vuoi sfidare.</p></div><span>Da 2 a 10 giocatori secondo il gioco</span></div>'+
     '<div class="catalog-tools"><label class="game-search">'+icon('search')+'<input type="search" id="game-search" aria-label="Cerca un gioco" aria-keyshortcuts="/" placeholder="Cerca un gioco…" value="'+escape(gameQuery)+'"><kbd aria-hidden="true">/</kbd></label><div class="game-filters" role="group" aria-label="Tipo di gioco">'+Object.entries(gameFilters).map(([key,label])=>'<button class="outline" type="button" data-filter="'+key+'" aria-pressed="'+(gameFilter===key)+'">'+label+'</button>').join('')+'</div></div>'+
     '<p class="empty-rooms" id="catalog-empty" role="status" hidden>Nessun gioco trovato.</p><div class="cards">'+Object.entries(catalog).map(([id,g],i)=>
@@ -1426,6 +1429,7 @@ app.addEventListener('click',async e=>{
   if(d.closeRoom){closeFromDashboard(d.closeRoom);return;}
   if(d.dismiss) {
     localStorage.removeItem('tavolo:'+d.dismiss);
+    profileUpdate({remove:[d.dismiss]});
     monitors.get(d.dismiss)?.();
     monitors.delete(d.dismiss);
     seenRooms.delete(d.dismiss);
@@ -1472,6 +1476,7 @@ app.addEventListener('click',async e=>{
   }
   switch(d.action) {
     case 'enter': nameDialog();break;
+    case 'profile': profileDialog();break;
     case 'restore': restoreRoom();break;
     case 'invite':
       try{await navigator.clipboard.writeText(href());toast('Link di invito copiato.');}
@@ -1543,8 +1548,8 @@ app.addEventListener('keydown',event=>{
     event.preventDefault();event.target.form.requestSubmit();
   }
 });
-joinButton.insertAdjacentHTML('beforebegin','<button class="outline profile-button" type="button" id="rename-seat" aria-label="Cambia nickname" title="Cambia nickname">'+icon('profile')+'<span>Nickname</span></button>');
-document.querySelector('#rename-seat').onclick=renameDialog;
+joinButton.insertAdjacentHTML('beforebegin','<button class="outline profile-button" type="button" id="profile-button" aria-haspopup="dialog" title="Profilo, link personale e nickname">'+icon('profile')+'<span class="nav-label profile-name">Profilo</span></button>');
+document.querySelector('#profile-button').onclick=()=>profileDialog();
 joinButton.insertAdjacentHTML('afterbegin',icon('enter'));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&state)paintChat();});
 function updateEditor(field) {
@@ -1678,6 +1683,246 @@ app.addEventListener('submit',async e=>{
   } catch(error){toast(error.message);}
   finally{chatSending=false;}
 });
+// ---- Profile: a passwordless identity that follows the player across devices ----
+// The key lives in this browser and in the personal link (#profilo=…). The server keeps the
+// profile's rooms, so opening the link anywhere brings the same rooms and games back.
+const PROFILES='tavolo:profiles', ACTIVE='tavolo:profile';
+function noticeAfterReload(message) {try {sessionStorage.setItem('tavolo:notice',message);} catch {}}
+function knownProfiles() {
+  try {
+    const list=JSON.parse(localStorage.getItem(PROFILES));
+    return Array.isArray(list)?list.filter(entry=>personal.validKey(entry?.key)):[];
+  } catch {return [];}
+}
+function rememberProfile(key,name) {
+  const list=knownProfiles(), old=list.find(entry=>entry.key===key);
+  const next=[{key,name:name??old?.name??''},...list.filter(entry=>entry.key!==key)];
+  localStorage.setItem(PROFILES,JSON.stringify(next.slice(0,12)));
+}
+const activeProfile=()=>{const key=localStorage.getItem(ACTIVE);return personal.validKey(key)?key:null;};
+const profileName=key=>knownProfiles().find(entry=>entry.key===key)?.name||'';
+const plainNickname=()=>parseChat(localStorage.getItem('tavolo:nickname')??'').text.trim().slice(0,40);
+let profileView=null, profileSync=null, lastProfileSync=0;
+async function profileApi(key,body) {
+  const response=await fetch('/api/profile',{
+    method:body===undefined?'GET':'POST',
+    headers:{Authorization:'Bearer '+key,...(body===undefined?{}:{'Content-Type':'application/json'})},
+    body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(9000)
+  });
+  const data=await response.json().catch(()=>null);
+  if(!response.ok)throw Object.assign(new Error(data?.error||'Profilo non disponibile.'),{status:response.status});
+  return data;
+}
+// Creates a profile on the server and makes it the active one on this device.
+async function createProfile(name=plainNickname(),seats=savedSeats()) {
+  const key=random(32);
+  const view=await profileApi(key,{name,nickname:localStorage.getItem('tavolo:nickname'),add:seats});
+  localStorage.setItem(ACTIVE,key);
+  rememberProfile(key,view.name);
+  profileView=view;
+  paintProfileButton();
+  return key;
+}
+function profileUpdate(change) {
+  const key=activeProfile();
+  if(!key)return;
+  profileApi(key,change).then(view=>{profileView=view;rememberProfile(key,view.name);paintProfileButton();}).catch(()=>{});
+}
+// A new room joins the profile; the first room on a device creates the profile.
+function profileAdd(room,seat) {
+  (activeProfile()?Promise.resolve():createProfile().catch(()=>{})).then(()=>profileUpdate({add:[{code:room,token:seat}]}));
+}
+function syncProfile() {
+  profileSync??=runProfileSync().catch(()=>false).finally(()=>{profileSync=null;lastProfileSync=Date.now();});
+  return profileSync;
+}
+async function runProfileSync() {
+  const key=activeProfile();
+  if(!key)return false;
+  let remote;
+  try {remote=await profileApi(key);}
+  catch(error) {
+    if(error.status!==404)return false;
+    // Expired on the server: rebuild it from the rooms this device still knows.
+    remote=await profileApi(key,{name:profileName(key)||plainNickname(),nickname:localStorage.getItem('tavolo:nickname'),add:savedSeats()});
+  }
+  const {download,upload,drop}=personal.mergeSeats(savedSeats(),remote);
+  for(const seat of download)localStorage.setItem('tavolo:'+seat.code,seat.token);
+  for(const room of drop) {
+    localStorage.removeItem('tavolo:'+room);
+    monitors.get(room)?.();
+    monitors.delete(room);
+    seenRooms.delete(room);
+  }
+  if(upload.length)remote=await profileApi(key,{add:upload});
+  profileView=remote;
+  rememberProfile(key,remote.name);
+  if(remote.nickname&&!localStorage.getItem('tavolo:nickname'))localStorage.setItem('tavolo:nickname',remote.nickname);
+  paintProfileButton();
+  if(download.length||drop.length) {
+    if(!state&&!code)render();else paintRooms();
+    monitorRooms();
+  }
+  return true;
+}
+// Switching keeps every profile intact: this device's rooms stay with the profile they belong to.
+async function switchProfile(key) {
+  const current=activeProfile();
+  if(current===key)return;
+  if(current)await syncProfile();
+  else if(savedSeats().length)await createProfile();
+  for(const {code:room} of savedSeats())localStorage.removeItem('tavolo:'+room);
+  localStorage.setItem(ACTIVE,key);
+  rememberProfile(key);
+  profileView=null;
+  await syncProfile();
+}
+async function forgetProfile(key) {
+  if(key===activeProfile()) {
+    await syncProfile();
+    for(const {code:room} of savedSeats())localStorage.removeItem('tavolo:'+room);
+    localStorage.removeItem(ACTIVE);
+  }
+  localStorage.setItem(PROFILES,JSON.stringify(knownProfiles().filter(entry=>entry.key!==key)));
+}
+function paintProfileButton() {
+  const button=document.querySelector('#profile-button');
+  if(!button)return;
+  const name=profileName(activeProfile());
+  button.querySelector('.profile-name').textContent=name||'Profilo';
+  button.setAttribute('aria-label','Profilo'+(name?': '+name:'')+', link personale e nickname');
+  const hint=document.querySelector('.profile-hint');
+  if(hint)hint.outerHTML=profileHint();
+}
+function profileHint() {
+  const key=activeProfile();
+  return '<button class="profile-hint" type="button" data-action="profile">'+icon('link')+(key?'<span>Profilo <strong>'+escape(profileName(key)||'senza nome')+'</strong> · copia il link personale per ritrovare queste partite su altri dispositivi</span>':'<span>Gioca da più dispositivi: crea il tuo profilo e il link personale</span>')+'</button>';
+}
+const profileAvatar=(key,name)=>'<span class="avatar seat-'+personal.profileHue(key)+'" aria-hidden="true">'+escape(Array.from(name||'?')[0].toLocaleUpperCase('it'))+'</span>';
+function profileMarkup() {
+  const key=activeProfile(), name=profileName(key), list=knownProfiles();
+  const rooms=savedSeats().length;
+  const card=key?
+    '<section class="profile-card">'+profileAvatar(key,name)+'<form class="profile-name-form"><label for="profile-name">Nome del profilo</label><div class="form-row"><input id="profile-name" maxlength="40" autocomplete="off" value="'+escape(name)+'" placeholder="Per esempio: Davide · ufficio"><button class="outline">Salva</button></div>'+
+    '<small>'+(rooms===1?'1 stanza collegata':rooms+' stanze collegate')+' · il profilo resta attivo 90 giorni dall’ultimo uso</small></form></section>'+
+    '<div class="profile-link-box"><span class="profile-label">Link personale</span><code id="profile-link">'+escape(personal.maskedLink(location.origin,key))+'</code>'+
+    '<div class="profile-link-actions"><button type="button" class="primary" data-profile="copy">'+icon('copy')+'Copia link</button>'+(navigator.share?'<button type="button" class="outline" data-profile="share">'+icon('send')+'Invia</button>':'')+'</div>'+
+    '<p class="profile-warning">Aprilo su un altro dispositivo, browser o app per ritrovare le tue partite. Tienilo per te: chi lo apre entra nel profilo e gioca al tuo posto.</p></div>':
+    '<section class="profile-empty"><p>Su questo dispositivo non c’è ancora un profilo. Si crea da solo con la prima stanza, oppure crealo adesso per avere subito il link personale.</p><button type="button" class="primary" data-profile="create">Crea il mio profilo</button></section>';
+  const others=list.length?'<h3>Profili su questo dispositivo</h3><ul class="profile-list">'+list.map(entry=>'<li'+(entry.key===key?' aria-current="true"':'')+'>'+profileAvatar(entry.key,entry.name)+
+    '<span><strong>'+escape(entry.name||'Senza nome')+'</strong><small>'+(entry.key===key?'In uso adesso':'Chiave …'+entry.key.slice(-4))+'</small></span>'+
+    (entry.key===key?'':'<button type="button" class="outline" data-profile="use" data-key="'+entry.key+'">Usa</button>')+
+    '<button type="button" class="link" data-profile="forget" data-key="'+entry.key+'">Dimentica</button></li>').join('')+'</ul>':'';
+  return '<div class="profile-dialog"><h2>Il tuo <em>profilo</em></h2><p class="profile-lead">Il profilo raccoglie le tue stanze e il tuo nickname, senza password. Con il link personale lo riapri ovunque e ritrovi le partite in corso.</p>'+
+    card+others+
+    '<details class="profile-more"><summary>Apri un profilo con il link personale</summary><form class="profile-open"><div class="form-row"><input id="profile-paste" autocomplete="off" placeholder="Incolla qui il link personale"><button class="primary">Apri</button></div></form></details>'+
+    '<details class="profile-more"><summary>Crea un altro profilo</summary><form class="profile-new"><div class="form-row"><input id="profile-new-name" maxlength="40" autocomplete="off" placeholder="Nome del nuovo profilo"><button class="outline">Crea e usa</button></div><small>Le partite del profilo attuale restano raggiungibili dal suo link.</small></form></details>'+
+    '<div class="profile-footer"><button type="button" class="outline" data-profile="nickname">'+icon('profile')+'Cambia nickname</button></div>'+
+    '<p class="error profile-error" role="alert"></p></div>';
+}
+function profileDialog() {
+  showModal(profileMarkup());
+  const box=modal.querySelector('.profile-dialog'), error=box.querySelector('.profile-error');
+  const fail=message=>{error.textContent=message;};
+  box.querySelector('.profile-name-form')?.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const key=activeProfile(), name=box.querySelector('#profile-name').value.trim();
+    try {
+      profileView=await profileApi(key,{name});
+      rememberProfile(key,profileView.name);
+      paintProfileButton();
+      toast('Nome del profilo salvato.');
+      profileDialog();
+    } catch(failure) {fail(failure.message);}
+  });
+  box.querySelector('.profile-open').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const key=personal.keyFromText(box.querySelector('#profile-paste').value);
+    if(!key){fail('Incolla il link personale completo, quello che contiene #profilo=.');return;}
+    try {
+      const view=await profileApi(key);
+      await switchProfile(key);
+      noticeAfterReload('Profilo «'+(view.name||'senza nome')+'» attivo.');
+      location.assign('/?vista=partite');
+    } catch(failure) {fail(failure.status===404?'Questo link non corrisponde a un profilo attivo. Potrebbe essere scaduto.':failure.message);}
+  });
+  box.querySelector('.profile-new').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const name=box.querySelector('#profile-new-name').value.trim();
+    if(!name){fail('Dai un nome al nuovo profilo.');return;}
+    try {
+      const key=random(32);
+      const view=await profileApi(key,{name,nickname:localStorage.getItem('tavolo:nickname'),add:[]});
+      rememberProfile(key,view.name);
+      await switchProfile(key);
+      noticeAfterReload('Nuovo profilo «'+view.name+'» attivo. Copia il suo link personale dal menu Profilo.');
+      location.assign('/?vista=partite');
+    } catch(failure) {fail(failure.message);}
+  });
+  // Refresh the count of linked rooms once the profile is in sync.
+  if(activeProfile())syncProfile().then(changed=>{if(changed&&modal.open&&modal.querySelector('.profile-dialog'))modal.querySelector('.profile-card small').textContent=(savedSeats().length===1?'1 stanza collegata':savedSeats().length+' stanze collegate')+' · il profilo resta attivo 90 giorni dall’ultimo uso';});
+}
+modal.addEventListener('click',async e=>{
+  const button=e.target.closest('[data-profile]');
+  if(!button)return;
+  const action=button.dataset.profile, key=button.dataset.key, error=modal.querySelector('.profile-error');
+  try {
+    if(action==='copy'||action==='share') {
+      const link=personal.profileLink(location.origin,activeProfile());
+      if(action==='share'){await navigator.share({title:'Tavolo · il mio profilo',url:link});return;}
+      try {await navigator.clipboard.writeText(link);toast('Link personale copiato. Aprilo sugli altri dispositivi per ritrovare le partite.');}
+      catch {
+        const code=modal.querySelector('#profile-link');
+        code.outerHTML='<input id="profile-link" readonly aria-label="Link personale" value="'+escape(link)+'">';
+        modal.querySelector('#profile-link').select();
+      }
+    } else if(action==='create') {
+      await createProfile();
+      profileDialog();
+    } else if(action==='use') {
+      button.disabled=true;
+      await switchProfile(key);
+      noticeAfterReload('Profilo «'+(profileName(key)||'senza nome')+'» attivo.');
+      location.assign('/?vista=partite');
+    } else if(action==='forget') {
+      if(!button.dataset.confirm) {
+        button.dataset.confirm='1';
+        button.textContent=key===activeProfile()?'Conferma: esci da questo profilo':'Conferma';
+        setTimeout(()=>{if(button.isConnected){delete button.dataset.confirm;button.textContent='Dimentica';}},5000);
+        return;
+      }
+      const wasActive=key===activeProfile();
+      await forgetProfile(key);
+      const message='Profilo dimenticato su questo dispositivo. Il suo link personale continua a funzionare.';
+      if(wasActive){noticeAfterReload(message);location.assign('/?vista=partite');}
+      else {toast(message);profileDialog();}
+    } else if(action==='nickname') {
+      modal.close();
+      renameDialog();
+    }
+  } catch(failure) {if(error)error.textContent=failure.message;}
+});
+// Arriving from a personal link: adopt that profile, then drop the key from the address bar.
+const linkKey=personal.keyFromText(location.hash);
+if(location.hash.includes('profilo='))history.replaceState(history.state,'',location.pathname+location.search);
+async function startProfile() {
+  if(linkKey&&linkKey!==activeProfile()) {
+    try {
+      const view=await profileApi(linkKey);
+      await switchProfile(linkKey);
+      const message='Profilo «'+(view.name||'senza nome')+'» attivo: qui trovi le sue stanze e partite.';
+      if(code)toast(message);else noticeAfterReload(message);
+      return;
+    } catch(failure) {
+      toast(failure.status===404?'Il link personale non corrisponde a un profilo attivo. Potrebbe essere scaduto.':'Impossibile aprire il profilo. Riprova più tardi.');
+    }
+  }
+  // Players from before profiles existed: gather this device's rooms into one.
+  if(!activeProfile()&&savedSeats().length)await createProfile().catch(()=>{});
+  await syncProfile();
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&activeProfile()&&Date.now()-lastProfileSync>20000)syncProfile();});
+paintProfileButton();
 const fxToggle=document.querySelector('#fx-toggle');
 function syncFxToggle() {
   const full=fx.motionLevel()==='full', locked=fx.systemReduced();
@@ -1730,5 +1975,19 @@ document.addEventListener('keydown',e=>{
   search.select();
 });
 render();
-monitorRooms();
-restoreRoom();
+try {
+  const message=sessionStorage.getItem('tavolo:notice');
+  if(message){sessionStorage.removeItem('tavolo:notice');toast(message);}
+} catch {}
+// A personal link, or a room link on a device that has not synced yet, waits for the profile.
+if(linkKey||(code&&!token&&activeProfile())) {
+  startProfile().finally(()=>{
+    if(code)token=localStorage.getItem('tavolo:'+code);
+    if(linkKey&&!code)location.replace('/?vista=partite');
+    else {render();monitorRooms();restoreRoom();}
+  });
+} else {
+  monitorRooms();
+  restoreRoom();
+  startProfile();
+}

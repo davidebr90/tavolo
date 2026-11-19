@@ -22,6 +22,10 @@ test('Local HTTP and realtime over TCP', {timeout:15000,skip:!process.env.TAVOLO
   assert.equal(config.transport,'sse');
   assert.match(config.version,/^\d+\.\d+\.\d+$/);
   assert.ok(Number.isFinite(Date.parse(config.updated)));
+  const profileKey=random(32), profileCall=(body)=>fetch(base+'/api/profile',{method:body?'POST':'GET',headers:headers(profileKey),body:body?JSON.stringify(body):undefined});
+  assert.equal((await profileCall()).status,404);
+  assert.equal((await profileCall({name:'Ada',add:[{code:random(12),token:random(32)}]})).status,200);
+  assert.equal((await (await profileCall()).json()).seats.length,1);
   const code=random(12),host=random(32),guest=random(32);
   assert.equal((await call(code,host,'',{game:'tris',name:'Ada'}))[0],200);
   const stream=await fetch(base+'/api/rooms/'+code+'/events?seat='+host);

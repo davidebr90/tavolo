@@ -18,7 +18,7 @@ Apri PowerShell nella cartella estratta e avvia il server di sviluppo con Node.j
 node dev.mjs
 ```
 
-Apri [http://127.0.0.1:8788](http://127.0.0.1:8788), crea una stanza e apri l’invito in una finestra InPrivate o in un altro browser per simulare il secondo giocatore. Lo stesso profilo browser conserva il posto già occupato. In locale gli aggiornamenti arrivano via Server-Sent Events, con richieste periodiche come ripiego.
+Apri [http://127.0.0.1:8788](http://127.0.0.1:8788), crea una stanza e apri l’invito in una finestra InPrivate o in un altro browser per simulare il secondo giocatore. Lo stesso browser conserva il posto già occupato; su un altro dispositivo lo ritrovi con il link personale del profilo. In locale gli aggiornamenti arrivano via Server-Sent Events, con richieste periodiche come ripiego.
 
 ## Pubblicazione su Cloudflare
 
@@ -34,9 +34,19 @@ Apri l'indirizzo HTTPS restituito da Wrangler per giocare. Puoi aggiungerlo al c
 
 Worker, asset e Durable Object SQLite sono configurati nello stesso progetto. Ogni stanza è gestita da un oggetto distinto. Le mosse viaggiano via HTTPS e gli aggiornamenti arrivano via WebSocket con ibernazione. Quando il WebSocket non è raggiungibile, il browser recupera lo stato via HTTPS. La scrittura della mossa, della versione e della ricevuta per i tentativi ripetuti avviene in una singola operazione SQLite. La flotta avversaria resta nel backend, che pubblica uno stato diverso per ciascun posto.
 
-I link danno accesso alla stanza a chi li riceve. Il posto viene salvato localmente nel profilo browser usato per entrare. Per tornare in partita basta riaprire lo stesso link nello stesso profilo.
+I link delle stanze danno accesso a chi li riceve: chi entra occupa un posto libero. Il tuo posto è legato al tuo **profilo**.
 
-Da **Home → Partite in corso** puoi controllare e riprendere più stanze. **Chiudi partita** chiude subito se l’altra persona non ha ancora fatto una mossa. Altrimenti la stanza resta attiva finché l’altro giocatore accetta. Se rifiuta, si continua a giocare. Gli avvisi si aggiornano mentre Tavolo resta aperto. In locale le stanze sono salvate sotto la cartella temporanea del sistema, in Tavolo. Un riavvio di Node dalla stessa installazione permette di riprendere la partita dallo stesso link e profilo browser. Per scegliere una cartella diversa, imposta TAVOLO_ROOM_DIR prima di avviare il server.
+## Profilo e link personale
+
+Il profilo raccoglie le tue stanze e il tuo nickname, senza password. Si crea da solo con la prima stanza, e chi aveva già partite le ritrova raccolte in un profilo al primo avvio. Dal menu **Profilo** in alto copi il **link personale**: aprendolo su un altro dispositivo, browser o app ritrovi le stesse stanze e partite in corso. Funziona anche dopo aver cancellato i dati del browser.
+
+- La chiave del profilo sta dopo `#profilo=` nel link. Il browser non la invia al server e Tavolo la toglie dalla barra degli indirizzi appena aperta. Il server conserva il profilo sotto un'impronta SHA-256 della chiave.
+- Chi apre il link entra nel profilo e gioca al tuo posto: tienilo per te.
+- Dal menu puoi dare un nome al profilo, crearne un altro, passare a mano tra i profili ricordati sul dispositivo, aprirne uno incollando il link o dimenticarlo sul dispositivo. Il link continua a funzionare.
+- Le stanze rimosse su un dispositivo spariscono anche dagli altri. Le stanze scadono comunque dopo 24 ore senza attività; il profilo dopo 90 giorni senza utilizzo.
+- Su Cloudflare ogni profilo è un Durable Object `PlayerProfile` (migrazione `v2` in `wrangler.jsonc`). In locale i profili stanno nella cartella `profili` accanto alle stanze.
+
+Da **Home → Partite in corso** puoi controllare e riprendere più stanze. **Chiudi partita** chiude subito se l’altra persona non ha ancora fatto una mossa. Altrimenti la stanza resta attiva finché l’altro giocatore accetta. Se rifiuta, si continua a giocare. Gli avvisi si aggiornano mentre Tavolo resta aperto. In locale le stanze sono salvate sotto la cartella temporanea del sistema, in Tavolo. Un riavvio di Node dalla stessa installazione permette di riprendere la partita dallo stesso link e dallo stesso browser, o dal link personale del profilo. Per scegliere una cartella diversa, imposta TAVOLO_ROOM_DIR prima di avviare il server.
 
 Ogni stanza mantiene gli ultimi 50 messaggi, con un massimo di 280 caratteri per messaggio. La sessione scade dopo 24 ore senza mosse, accesso del secondo giocatore o messaggi. Il server locale rimuove i file scaduti e il Worker pianifica la rimozione della riga di stato.
 
@@ -67,7 +77,7 @@ Accanto al logo compaiono il numero di versione e la data dell'ultimo aggiorname
 
 Tavolo usa un tema scuro da sala da gioco: feltro, noce e ottone, con Bodoni Moda per i titoli e Schibsted Grotesk per i testi. Ogni mossa ha un'animazione propria. I pezzi degli scacchi e della dama scivolano o saltano fino alla destinazione, i dischi di Reversi si girano in sequenza e le pedine di Forza 4 cadono nella colonna. In Battaglia navale i colpi a segno esplodono e quelli in acqua sollevano schizzi. Le carte volano dal mazzo alla mano e si girano. Vittorie, scope, UNO e scacchi hanno un annuncio a tutto schermo, con coriandoli quando vinci.
 
-Il pulsante ✦ in alto riduce gli effetti al minimo e la scelta resta nel profilo del browser. Con l'impostazione di sistema *riduci movimento* gli effetti restano ridotti. Gli effetti non partono quando la scheda è in background. Il titolo della scheda mostra ● quando tocca a te.
+Il pulsante ✦ in alto riduce gli effetti al minimo e la scelta resta in questo browser. Con l'impostazione di sistema *riduci movimento* gli effetti restano ridotti. Gli effetti non partono quando la scheda è in background. Il titolo della scheda mostra ● quando tocca a te.
 
 - `public/effects.mjs` confronta due stati della stanza e descrive cosa è cambiato. È testato in `test/effects.test.mjs`.
 - `public/motion.mjs` disegna particelle, voli delle carte, spostamenti dei pezzi e annunci.
@@ -76,11 +86,11 @@ Il pulsante ✦ in alto riduce gli effetti al minimo e la scelta resta nel profi
 
 Mosse e Chat si aprono in una colonna a destra della partita, alta quanto il tavolo, con la cronologia sopra e la chat sotto. Su schermi stretti la colonna scende sotto il tavolo.
 
-Il campo della chat e quello del nickname mostrano il testo già formattato: seleziona una parte e scegli grassetto, corsivo, sottolineato, barrato o un colore. Con il cursore fermo, lo stile vale per le lettere che scrivi dopo. Ctrl+B, Ctrl+I e Ctrl+U sono le scorciatoie, Maiusc+Invio va a capo nella chat. Il pulsante </> passa alla modalità codice, dove scrivi e vedi i tag come [b]testo[/b] o [red]testo[/red], con l'anteprima sotto. La scelta resta nel profilo del browser.
+Il campo della chat e quello del nickname mostrano il testo già formattato: seleziona una parte e scegli grassetto, corsivo, sottolineato, barrato o un colore. Con il cursore fermo, lo stile vale per le lettere che scrivi dopo. Ctrl+B, Ctrl+I e Ctrl+U sono le scorciatoie, Maiusc+Invio va a capo nella chat. Il pulsante </> passa alla modalità codice, dove scrivi e vedi i tag come [b]testo[/b] o [red]testo[/red], con l'anteprima sotto. La scelta resta in questo browser.
 
 ## Grafica delle carte
 
-In Scopa scegli Napoletane, Piacentine o Bergamasche dal menu **Mazzo**. L'app usa le scansioni dei fronti e un dorso comune per le carte coperte. La scelta del mazzo rimane nel profilo del browser.
+In Scopa scegli Napoletane, Piacentine o Bergamasche dal menu **Mazzo**. L'app usa le scansioni dei fronti e un dorso comune per le carte coperte. La scelta del mazzo resta in questo browser.
 
 ## Licenza
 
