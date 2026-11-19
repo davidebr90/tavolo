@@ -12,6 +12,7 @@ test('Core update times are read from ISO strings and epoch values',()=>{
   assert.equal(updatedAt(iso)?.toISOString(),iso);
   assert.equal(updatedAt(Date.parse(iso))?.toISOString(),iso);
   assert.equal(updatedAt(Date.parse(iso)/1000)?.toISOString(),iso);
+  assert.equal(updatedAt('2026-11-19T08:28:17.616941Z')?.toISOString(),'2026-11-19T08:28:17.616Z');
   for(const value of [undefined,null,'',' ','domani',0,-5,Number.NaN,{}])assert.equal(updatedAt(value),null);
 });
 

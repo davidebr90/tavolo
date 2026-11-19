@@ -9,6 +9,7 @@ export function updatedAt(value) {
     return Number.isFinite(date.getTime())?date:null;
   }
   if(typeof value!=='string'||!value.trim())return null;
-  const date=new Date(value);
+  // Cloudflare sends microseconds; some browsers only parse milliseconds.
+  const date=new Date(value.trim().replace(/(\.\d{3})\d+/,'$1'));
   return Number.isFinite(date.getTime())?date:null;
 }
