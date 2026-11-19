@@ -1,15 +1,19 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { readdirSync, statSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { route, answer, handle } from './src/service.mjs';
+import { route, answer, handle, settings } from './src/service.mjs';
 import { localRooms } from './src/local-rooms.mjs';
 
 const instance=createHash('sha256').update(import.meta.url).digest('hex').slice(0,16);
 const directory=process.env.TAVOLO_ROOM_DIR??join(tmpdir(),'Tavolo',instance);
 const rooms=localRooms(directory), feeds=new Map();
+// Locally the core was last updated when a file in src/ last changed on disk.
+const core=new URL('./src/',import.meta.url);
+const coreUpdated=new Date(Math.max(...readdirSync(core).map(name=>statSync(new URL(name,core)).mtimeMs))).toISOString();
 const mime={html:'text/html',css:'text/css',mjs:'text/javascript',webp:'image/webp'};
 const server=createServer(async (req,res)=>{
   try {
@@ -49,7 +53,7 @@ const server=createServer(async (req,res)=>{
       res.end(await response.text());
       return;
     }
-    if(url.pathname==='/api/config') {res.writeHead(200,{'Content-Type':'application/json'}).end('{"transport":"sse"}');return;}
+    if(url.pathname==='/api/config') {res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'}).end(JSON.stringify(settings('sse',coreUpdated)));return;}
     const name=url.pathname==='/'?'index.html':url.pathname.slice(1);
     if(!/^[\w.-]+\.(html|css|mjs|webp)$/.test(name)) {res.writeHead(404).end();return;}
     const body=await readFile(new URL('./public/'+name,import.meta.url));

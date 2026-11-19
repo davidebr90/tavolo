@@ -160,5 +160,5 @@ export function viewCards(s,side) {
   if(id==='scopa') return {...out,table:s.table,captured:s.captured,sweepCards:s.sweepCards??[[],[]],securedPoints:securedPoints(s),captureCounts:s.captured.map(cards=>cards.length),scores:s.scores,points:s.points,round:s.round,sweeps:s.sweeps,
     takes:own?Object.fromEntries(hand.map(c=>[c,takes(s.table,c)])):{}};
   return {...out,top:s.discard.at(-1),color:s.color,drawn:own&&s.drawn!==null,
-    playable:own?hand.filter(c=>unoLegal(s,c)):[]};
+    playable:own?hand.filter(c=>unoLegal(s,c)):[],direction:s.direction??1};
 }

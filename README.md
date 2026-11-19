@@ -54,11 +54,24 @@ Scacchi riconosce le comuni posizioni di materiale insufficiente. La richiesta d
 
 ## Struttura
 
-- `public/` contiene lobby, interfaccia di partita e schede Regole.
+- `public/` contiene lobby, interfaccia di partita, schede Regole ed effetti animati.
 - `src/games.mjs` definisce il contratto dei giochi e i motori. Scacchi ha un modulo dedicato.
 - `src/room.mjs` gestisce posti, turni, versioni e ricevute.
 - `src/worker.mjs` e `wrangler.jsonc` descrivono il deployment gestito.
 - `dev.mjs` avvia la versione locale.
+## Versione
+
+Accanto al logo compaiono il numero di versione e la data dell'ultimo aggiornamento del core. Il pallino verde segnala un aggiornamento nelle ultime 24 ore. Il numero è in `public/version.mjs`: aggiornalo a ogni rilascio. La data la fornisce il server tramite `/api/config`. Su Cloudflare è l'ora di creazione della versione del Worker, letta dal binding `CF_VERSION_METADATA` e aggiornata a ogni `wrangler deploy`. In locale è l'ultima modifica dei file in `src/`.
+
+## Interfaccia ed effetti
+
+Tavolo usa un tema scuro da sala da gioco: feltro, noce e ottone, con Bodoni Moda per i titoli e Schibsted Grotesk per i testi. Ogni mossa ha un'animazione propria. I pezzi degli scacchi e della dama scivolano o saltano fino alla destinazione, i dischi di Reversi si girano in sequenza e le pedine di Forza 4 cadono nella colonna. In Battaglia navale i colpi a segno esplodono e quelli in acqua sollevano schizzi. Le carte volano dal mazzo alla mano e si girano. Vittorie, scope, UNO e scacchi hanno un annuncio a tutto schermo, con coriandoli quando vinci.
+
+Il pulsante ✦ in alto riduce gli effetti al minimo e la scelta resta nel profilo del browser. Con l'impostazione di sistema *riduci movimento* gli effetti restano ridotti. Gli effetti non partono quando la scheda è in background. Il titolo della scheda mostra ● quando tocca a te.
+
+- `public/effects.mjs` confronta due stati della stanza e descrive cosa è cambiato. È testato in `test/effects.test.mjs`.
+- `public/motion.mjs` disegna particelle, voli delle carte, spostamenti dei pezzi e annunci.
+
 ## Grafica delle carte
 
 In Scopa scegli Napoletane, Piacentine o Bergamasche dal menu **Mazzo**. L'app usa le scansioni dei fronti e un dorso comune per le carte coperte. La scelta del mazzo rimane nel profilo del browser.

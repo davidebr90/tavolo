@@ -18,6 +18,10 @@ test('Local HTTP and realtime over TCP', {timeout:15000,skip:!process.env.TAVOLO
   const index=await fetch(base);
   assert.match(await index.text(),/Tavolo/);
   assert.equal((await fetch(base+'/app.mjs')).status,200);
+  const config=await (await fetch(base+'/api/config')).json();
+  assert.equal(config.transport,'sse');
+  assert.match(config.version,/^\d+\.\d+\.\d+$/);
+  assert.ok(Number.isFinite(Date.parse(config.updated)));
   const code=random(12),host=random(32),guest=random(32);
   assert.equal((await call(code,host,'',{game:'tris',name:'Ada'}))[0],200);
   const stream=await fetch(base+'/api/rooms/'+code+'/events?seat='+host);

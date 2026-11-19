@@ -1,11 +1,12 @@
 import { DurableObject } from 'cloudflare:workers';
-import { route, answer, handle, validToken } from './service.mjs';
+import { route, answer, handle, validToken, settings } from './service.mjs';
 import { snapshot, sessionLifetime } from './room.mjs';
 
 export default {
   async fetch(request,env) {
     const url=new URL(request.url);
     if(!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
+    if(url.pathname==='/api/config') return answer(settings('ws',env.CF_VERSION_METADATA?.timestamp));
     const match=route.exec(url.pathname);
     if(!match) return answer({error:'Percorso sconosciuto.'},404);
     const origin=request.headers.get('Origin');

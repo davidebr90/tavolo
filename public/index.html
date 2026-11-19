@@ -3,15 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#f8f7f3">
+<meta name="theme-color" content="#0c110f">
+<meta name="color-scheme" content="dark">
 <title>Tavolo · Giochi tra colleghi</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230c110f'/%3E%3Cg transform='rotate(45 16 16)'%3E%3Crect x='9' y='9' width='6' height='6' rx='1.5' fill='%23ec5b3f'/%3E%3Crect x='17' y='9' width='6' height='6' rx='1.5' fill='%23d9b366'/%3E%3Crect x='9' y='17' width='6' height='6' rx='1.5' fill='%2358c4b4'/%3E%3Crect x='17' y='17' width='6' height='6' rx='1.5' fill='%23f6eedd'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Schibsted+Grotesk:wght@400..800&display=swap">
 <link rel="stylesheet" href="/style.css">
 <link rel="modulepreload" href="/catalog.mjs">
 <link rel="modulepreload" href="/rooms.mjs">
+<link rel="modulepreload" href="/motion.mjs">
+<link rel="modulepreload" href="/effects.mjs">
+<link rel="modulepreload" href="/version.mjs">
+<script>try{if(localStorage.getItem('tavolo:effetti')==='calm'||matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.dataset.motion='calm';}catch{}</script>
 <script type="module" src="/app.mjs"></script>
 </head>
 <body>
-<header class="top"><div class="shell top-inner"><a class="brand" href="/" aria-label="Tavolo, Home"><span class="logomark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Tavolo<span class="dot">.</span></a><nav class="top-nav" aria-label="Navigazione principale"><a class="outline home-nav" href="/"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 10 9-7 9 7v10h-6v-6H9v6H3z"/></svg>Home<span id="turn-count" hidden></span></a><button class="outline" id="join-room">Entra in una stanza</button></nav></div></header>
+<header class="top"><div class="shell top-inner"><div class="brand-group"><a class="brand" href="/" aria-label="Tavolo, Home"><span class="logomark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Tavolo<span class="dot">.</span></a><p class="release" id="release" hidden></p></div><nav class="top-nav" aria-label="Navigazione principale"><button class="outline fx-toggle" type="button" id="fx-toggle" aria-label="Effetti visivi" aria-pressed="true"><span class="fx-glyph" aria-hidden="true">✦</span></button><a class="outline home-nav" href="/"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 10 9-7 9 7v10h-6v-6H9v6H3z"/></svg><span class="nav-label">Home</span><span id="turn-count" hidden></span></a><button class="outline" id="join-room" aria-label="Entra in una stanza"><span class="nav-label">Entra in una stanza</span></button></nav></div></header>
 <main class="shell" id="app"></main>
 <dialog id="modal"></dialog>
 <div class="toast" role="status" id="toast" hidden></div>

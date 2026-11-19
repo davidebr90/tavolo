@@ -1,9 +1,12 @@
 import { create, join, submit, snapshot, chat, renameSeat, sessionLifetime } from './room.mjs';
 import { parseChat } from '../public/chat-format.mjs';
+import { version } from '../public/version.mjs';
 
 export const route = /^\/api\/rooms\/([a-f0-9]{24})(?:\/(join|moves|live|events|chat|nickname))?$/;
 export const validToken = token => typeof token==='string' && /^[a-f0-9]{64}$/.test(token);
 export const answer = (body,status=200) => Response.json(body,{status,headers:{'Cache-Control':'no-store'}});
+// Client settings plus the release shown in the header. `updated` is when the core last changed.
+export const settings = (transport,updated) => ({transport,version,updated:updated??null});
 const nickname = value => {
   const name=typeof value==='string'?value.trim():'';
   if(!name || name.length>24) throw new Error('Inserisci un nickname da 1 a 24 caratteri.');
