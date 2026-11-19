@@ -9,6 +9,7 @@ import * as fx from './motion.mjs';
 import { version, updatedAt } from './version.mjs';
 import { shipTiles, shipSectors as fleetSectors, rotateShip } from './fleet.mjs';
 import { seatStat, turnNotes, chessMaterial } from './stats.mjs';
+import * as rich from './rich-editor.mjs';
 
 const app=document.querySelector('#app'), modal=document.querySelector('#modal'), joinButton=document.querySelector('#join-room');
 const codePattern=/^[a-f0-9]{24}$/;
@@ -181,22 +182,37 @@ function showModal(content) {
   modal.innerHTML='<form method="dialog" class="dialog-close"><button aria-label="Chiudi">×</button></form>'+content;
   modal.showModal();
 }
+const modeTitle=mode=>mode==='code'?'Modalità codice attiva: torna al testo formattato':'Mostra i codici di formattazione';
 function editorTools() {
+  const mode=rich.editorMode();
   return '<div class="editor-tools" role="group" aria-label="Formattazione">'+
-    [['b','Grassetto','B'],['i','Corsivo','I'],['u','Sottolineato','U'],['s','Barrato','S']].map(([tag,label,text])=>'<button type="button" class="outline format-'+tag+'" data-format="'+tag+'" aria-label="'+label+'" title="'+label+'">'+text+'</button>').join('')+
-    '<select class="editor-color" aria-label="Colore del testo"><option value="">Colore</option>'+Object.entries(chatColors).map(([color,label])=>'<option value="'+color+'">'+label+'</option>').join('')+'</select>'+
-    '<details class="emoji-picker"><summary aria-label="Emoji" title="Emoji">☺</summary><div class="emoji-grid">'+['😀','😂','😉','😎','🤔','😮','😅','😬','👍','👏','🙌','❤️','🔥','🎉','🤝','🎯','🏆','♟️'].map(emoji=>'<button type="button" data-emoji="'+emoji+'">'+emoji+'</button>').join('')+'</div></details></div>';
+    [['b','Grassetto (Ctrl+B)','B'],['i','Corsivo (Ctrl+I)','I'],['u','Sottolineato (Ctrl+U)','U'],['s','Barrato','S']].map(([tag,label,text])=>'<button type="button" class="outline format-'+tag+'" data-format="'+tag+'" aria-label="'+label+'" aria-pressed="false" title="'+label+'">'+text+'</button>').join('')+
+    '<details class="color-picker"><summary aria-label="Colore del testo" title="Colore del testo"><span class="color-sample">A</span></summary><div class="color-grid">'+
+    Object.entries(chatColors).map(([color,label])=>'<button type="button" class="swatch chat-color-'+color+'" data-color="'+color+'" aria-label="'+label+'" title="'+label+'">A</button>').join('')+
+    '<button type="button" class="swatch swatch-clear" data-color="" aria-label="Nessun colore" title="Nessun colore">⌀</button></div></details>'+
+    '<details class="emoji-picker"><summary aria-label="Emoji" title="Emoji">☺</summary><div class="emoji-grid">'+['😀','😂','😉','😎','🤔','😮','😅','😬','👍','👏','🙌','❤️','🔥','🎉','🤝','🎯','🏆','♟️'].map(emoji=>'<button type="button" data-emoji="'+emoji+'">'+emoji+'</button>').join('')+'</div></details>'+
+    '<button type="button" class="outline editor-mode" data-editor-mode aria-pressed="'+(mode==='code')+'" aria-label="Modalità codice" title="'+modeTitle(mode)+'"><span aria-hidden="true">&lt;/&gt;</span></button></div>';
+}
+// Visual field plus the markup textarea; only the one for the current mode is visible.
+function editorField({id,label,value,limit,maxlength,placeholder='',multiline=false,disabled=false}) {
+  const mode=rich.editorMode();
+  return '<div class="rich-input" id="'+id+'-rich" contenteditable="'+(disabled?'false':'true')+'" role="textbox" aria-label="'+escape(label)+'" aria-multiline="'+multiline+'" data-for="'+id+'" data-placeholder="'+escape(placeholder)+'"'+(mode==='code'?' hidden':'')+'>'+rich.richHtml(value)+'</div>'+
+    '<textarea id="'+id+'" rows="1" maxlength="'+maxlength+'" data-editor-limit="'+limit+'" aria-label="'+escape(label)+'" placeholder="'+escape(placeholder)+'"'+(mode==='rich'?' hidden':'')+'>'+escape(value)+'</textarea>';
 }
 function editorPreview(value,limit) {
   const parsed=parseChat(value);
-  return '<div class="editor-preview" '+(parsed.text===value?'hidden':'')+'>'+parsed.html+'</div><small class="editor-limit" '+(parsed.text.trim().length<=limit?'hidden':'')+'>Massimo '+limit+' caratteri.</small>';
+  return '<div class="editor-preview" '+(parsed.text===value||rich.editorMode()==='rich'?'hidden':'')+'>'+parsed.html+'</div><small class="editor-limit" '+(parsed.text.trim().length<=limit?'hidden':'')+'>Massimo '+limit+' caratteri.</small>';
 }
-function dialogForm(title,label,submitText,handler,value='',rich=false) {
-  const field=rich?'<textarea id="room-field" rows="1" required maxlength="240" data-editor-limit="24" aria-describedby="room-error">'+escape(value)+'</textarea>':
+function dialogForm(title,label,submitText,handler,value='',formatted=false) {
+  const field=formatted?editorField({id:'room-field',label,value,limit:24,maxlength:240}):
     '<input id="room-field" required maxlength="100" autocomplete="off" aria-describedby="room-error" value="'+escape(value)+'">';
-  showModal('<h2>'+title+'</h2><form class="form"><label for="room-field">'+label+'</label>'+(rich?editorTools():'')+'<div class="form-row">'+field+'<button class="primary">'+submitText+'</button></div>'+(rich?editorPreview(value,24):'')+'<p id="room-error" role="alert" class="error"></p></form>');
-  const form=modal.querySelector('.form'), input=form.querySelector('#room-field');
-  if(value)input.select();else input.focus();
+  showModal('<h2>'+title+'</h2><form class="form"><label for="room-field" id="room-label">'+label+'</label>'+(formatted?editorTools():'')+'<div class="form-row">'+field+'<button class="primary">'+submitText+'</button></div>'+(formatted?editorPreview(value,24):'')+'<p id="room-error" role="alert" class="error"></p></form>');
+  const form=modal.querySelector('.form'), input=form.querySelector('#room-field'), visual=form.querySelector('.rich-input');
+  form.querySelector('#room-label').onclick=e=>{if(visual&&!visual.hidden){e.preventDefault();rich.caretToEnd(visual);}};
+  if(visual&&!visual.hidden) {
+    visual.focus();
+    if(value)getSelection().selectAllChildren(visual);
+  } else if(value)input.select();else input.focus();
   form.onsubmit=async e=>{
     e.preventDefault();
     const button=form.querySelector('button');
@@ -433,6 +449,17 @@ addEventListener('storage',e=>{if(e.key?.startsWith('tavolo:')) {paintRooms();mo
 addEventListener('pagehide',()=>{stopLive?.();for(const stop of monitors.values())stop();monitors.clear();});
 addEventListener('pageshow',e=>{if(e.persisted){restoreRoom();monitorRooms();}});
 let tabChanged=false;
+// A freshly opened panel slides in; on narrow screens it sits below the board, so bring it into view.
+function revealPanel(selector,focusComposer) {
+  const panel=document.querySelector(selector);
+  if(!panel)return;
+  fx.flash(panel,'panel-enter',600);
+  if(compactRoom.matches)panel.scrollIntoView({block:'nearest',behavior:fx.lively()?'smooth':'auto'});
+  if(focusComposer&&!compactRoom.matches) {
+    const box=panel.querySelector('.rich-input:not([hidden])');
+    if(box)rich.caretToEnd(box);else panel.querySelector('textarea:not([hidden])')?.focus({preventScroll:true});
+  }
+}
 function rules(id,enter=true) {
   const g=catalog[id];
   return '<div class="rules'+(enter?' enter':'')+'"><h2>Come si gioca a <em>'+(id==='chess'?'scacchi':id==='dama'?'dama':g.name.toLowerCase())+'</em></h2>'+
@@ -925,7 +952,7 @@ function chatMessages() {
     const author=replaced?'<s class="former-nickname">'+displayNickname(m.author,m.authorMarkup)+'</s> ':'';
     const body=renderChatMessage(m);
     return '<li class="'+(m.side===state.side?'mine':m.sequence>cursor?'unread-message':'')+(since>=0&&m.sequence>since?' fresh':'')+'"><strong class="chat-author">'+author+displayNickname(state.players[m.side],state.playerMarkup?.[m.side])+'</strong><p>'+body+'</p></li>';
-  }).join('')||'<li class="chat-empty">Nessun messaggio.</li>';
+  }).join('')||'<li class="chat-empty"><strong>Nessun messaggio</strong>Scrivi il primo: puoi usare grassetto, colori ed emoji.</li>';
 }
 const displayNickname=(name,markup)=>markup?parseChat(markup).html:escape(name);
 // Live figure for a seat chip; in chess also the pieces that seat has captured.
@@ -939,7 +966,7 @@ function chipStat(s,seat) {
 const initial=(name,markup)=>escape(Array.from(((markup?parseChat(markup).text:name)??'').trim())[0]?.toLocaleUpperCase('it')??'?');
 function chatPanel() {
   const disabled=state.closed||state.players.length<2?'disabled':'';
-  return '<aside class="chat-panel" id="chat-panel" aria-labelledby="chat-title"><div class="chat-head"><h2 id="chat-title">Chat</h2><button class="link panel-close" data-action="chat" aria-label="Chiudi la chat">'+icon('close')+'</button></div><ol id="chat-messages" class="chat-messages" role="log" aria-live="polite">'+chatMessages()+'</ol><form id="chat-form"><fieldset '+disabled+'>'+editorTools()+'<div class="composer-row"><textarea id="chat-input" rows="1" maxlength="1600" data-editor-limit="280" aria-label="Messaggio" placeholder="Scrivi un messaggio">'+escape(chatDraft)+'</textarea><button type="submit" class="primary chat-send" aria-label="Invia messaggio" title="Invia messaggio">'+icon('send')+'</button></div>'+editorPreview(chatDraft,280)+'</fieldset></form></aside>';
+  return '<section class="chat-panel" id="chat-panel" aria-labelledby="chat-title"><div class="chat-head"><h2 id="chat-title">Chat</h2><button class="link panel-close" data-action="chat" aria-label="Chiudi la chat">'+icon('close')+'</button></div><ol id="chat-messages" class="chat-messages" role="log" aria-live="polite">'+chatMessages()+'</ol><form id="chat-form"><fieldset '+disabled+'>'+editorTools()+'<div class="composer-row">'+editorField({id:'chat-input',label:'Messaggio',value:chatDraft,limit:280,maxlength:1600,placeholder:'Scrivi un messaggio',multiline:true,disabled:Boolean(disabled)})+'<button type="submit" class="primary chat-send" aria-label="Invia messaggio" title="Invia messaggio">'+icon('send')+'</button></div>'+editorPreview(chatDraft,280)+'</fieldset></form></section>';
 }
 function paintChat() {
   const messages=document.querySelector('#chat-messages');
@@ -963,15 +990,16 @@ function movePanel(g) {
   const empty=last?'<p class="move-empty">Ultima mossa disponibile: <strong>'+escape(last)+'</strong></p>':'';
   const hint=!Array.isArray(g.history)?'Riavvia node dev.mjs dalla cartella aggiornata per registrare le prossime mosse.':
     last?'La cronologia completa non è disponibile per le mosse precedenti all’aggiornamento.':'Le mosse registrate compariranno qui.';
-  return '<aside class="move-panel" id="move-panel" aria-labelledby="moves-title"><div class="chat-head"><h2 id="moves-title">Mosse</h2><button class="link panel-close" data-action="moves" aria-label="Chiudi cronologia">'+icon('close')+'</button></div>'+
+  return '<section class="move-panel" id="move-panel" aria-labelledby="moves-title"><div class="chat-head"><h2 id="moves-title">Mosse</h2><button class="link panel-close" data-action="moves" aria-label="Chiudi cronologia">'+icon('close')+'</button></div>'+
     (rows.size?'<div class="move-list"><table><thead><tr><th scope="col">N.</th><th scope="col">Bianco</th><th scope="col">Nero</th></tr></thead><tbody>'+
     Array.from(rows,([n,[white,black]])=>'<tr><th scope="row">'+n+'</th><td>'+escape(white??'—')+'</td><td>'+escape(black??'—')+'</td></tr>').join('')+
-    '</tbody></table></div><button class="outline move-copy" type="button" data-action="copy-moves">'+icon('copy')+'Copia mosse</button>':empty+'<p class="move-empty">'+hint+'</p>')+'</aside>';
+    '</tbody></table></div><button class="outline move-copy" type="button" data-action="copy-moves">'+icon('copy')+'Copia mosse</button>':empty+'<p class="move-empty">'+hint+'</p>')+'</section>';
 }
 function room() {
   const s=state,g=s.game,meta=catalog[g.id], [tone,wording]=banner(s);
   const hasMoveHistory=g.id==='chess'||g.id==='dama';
   const showMoves=hasMoveHistory&&movesOpen&&tab==='play';
+  const dock=showMoves||chatOpen;
   const pass=g.id!=='reversi'||g.last?.pass===undefined?'':'<p class="subnote">'+escape(s.players[g.last.pass])+' passa il turno. Nessuna mossa valida.</p>';
   const disabled=!connected||pending?'disabled':'';
   const closure=s.closed?'<div class="closure-notice" role="status">Partita chiusa <a href="/?vista=partite">Torna alle partite in corso</a></div>':
@@ -990,9 +1018,9 @@ function room() {
     (hasMoveHistory?'<button class="outline" data-action="moves" aria-expanded="'+showMoves+'">'+icon('history')+'Mosse</button>':'')+
     '<button class="outline" id="chat-toggle" data-action="chat" aria-expanded="'+chatOpen+'">'+chatLabel(s)+'</button>'+
     (!s.closed&&g.result===null&&s.closeRequest==null?'<button class="link close-game" data-action="close-game" aria-label="Chiudi partita" title="Chiudi partita" '+disabled+'>'+icon('close')+'<span>Chiudi partita</span></button>':'')+'</div></div></div>'+
-    closure+'<div class="room-layout '+(chatOpen?'with-chat ':'')+(showMoves?'with-moves':'')+'">'+(showMoves?movePanel(g):'')+
+    closure+'<div class="room-layout'+(dock?' has-dock':'')+(tab==='play'&&seatHasTurn(s,s.side)&&!pending?' your-turn':'')+'">'+
     '<div id="tabpanel" role="tabpanel" aria-labelledby="tab-'+tab+'">'+(tab==='rules'?rules(g.id,tabChanged):
-    '<div class="match'+(seatHasTurn(s,s.side)&&!pending?' your-turn':'')+'">'+'<div class="banner '+tone+'" role="status"><i></i>'+escape(wording)+'</div>'+(['scopa','uno'].includes(g.id)?'':'<div class="players">'+Array.from({length:capacity},(_,i)=>{
+    '<div class="match">'+'<div class="banner '+tone+'" role="status"><i></i>'+escape(wording)+'</div>'+(['scopa','uno'].includes(g.id)?'':'<div class="players">'+Array.from({length:capacity},(_,i)=>{
       const seated=i<s.players.length;
       return '<div class="player'+(seatHasTurn(s,i)?' current':'')+(seated?'':' vacant')+'" data-seat="'+i+'"><span class="avatar seat-'+i+'" aria-hidden="true">'+(seated?initial(s.players[i],s.playerMarkup?.[i]):'+')+'</span><span><strong title="'+escape(s.players[i]??'Posto libero')+'">'+displayNickname(s.players[i]??'Posto libero',s.playerMarkup?.[i])+(i===s.side?' (tu)':'')+'</strong><small>'+(s.maxPlayers>2?(g.id==='scopa'?'Squadra '+(i%2+1):'Posto '+(i+1)):meta.players[i])+'</small></span>'+(seated?chipStat(s,i):'')+'</div>';
     }).join('')+'</div>')+
@@ -1001,7 +1029,8 @@ function room() {
     '<div class="match-actions">'+(g.canDraw&&acting()?'<button class="outline" data-action="draw">'+icon('draw')+'Richiedi patta</button>':'')+
     (pending&&!busy?'<button class="primary" data-action="retry">'+icon('redo')+'Recupera mossa</button>':'')+
     (prefix.length?'<button class="link" data-action="cancel">Annulla selezione</button>':'')+
-    '</div></div>')+'</div>'+(chatOpen?chatPanel():'')+'</div>';
+    '</div></div>')+'</div>'+
+    (dock?'<aside class="side-dock" aria-label="'+(showMoves&&chatOpen?'Mosse e chat':showMoves?'Mosse':'Chat')+'"><div class="dock-inner">'+(showMoves?movePanel(g):'')+(chatOpen?chatPanel():'')+'</div></aside>':'')+'</div>';
 }
 let paintedRoom=null;
 const baseTitle=document.title;
@@ -1019,6 +1048,7 @@ function render() {
   const chatAtEnd=!previousLog||previousLog.scrollHeight-chatScroll-previousLog.clientHeight<40;
   const deckFocused=focused?.id==='scopa-deck'?'scopa-deck':null;
   const chatFocused=focused?.id==='chat-input', cursor=chatFocused?focused.selectionStart:null;
+  const richFocused=focused?.id==='chat-input-rich', richAt=richFocused?rich.getOffsets(focused):null;
   const focusData=focused?.closest('#app')&&Object.entries(focused.dataset).find(([key])=>['tab','cell','action','naval'].includes(key));
   const entry=restoring?'<section class="entry"><h1>Caricamento partita…</h1></section>':
     expired?'<section class="entry"><h1>Stanza non disponibile</h1><p>La partita potrebbe essere scaduta o il server locale potrebbe essere stato riavviato.</p><a class="primary" href="/">Torna alla Home</a></section>':
@@ -1050,6 +1080,13 @@ function render() {
     const input=document.querySelector('#chat-input');
     input?.focus({preventScroll:true});
     input?.setSelectionRange(cursor,cursor);
+  }
+  if(richFocused) {
+    const box=document.querySelector('#chat-input-rich');
+    if(box&&!box.hidden) {
+      box.focus({preventScroll:true});
+      if(richAt)rich.setOffsets(box,richAt.start,richAt.end);else rich.caretToEnd(box);
+    }
   }
   if(anchor!==null&&app.querySelector('.navy-setup'))preview(null);
   if(deckFocused)document.getElementById(deckFocused)?.focus({preventScroll:true});
@@ -1448,8 +1485,8 @@ app.addEventListener('click',async e=>{
       else {vertical=!vertical;render();}
       break;
     case 'card-hints': cardHints=!cardHints;localStorage.setItem('tavolo-card-hints',cardHints?'1':'0');render();break;
-    case 'chat': chatOpen=!chatOpen;if(chatOpen&&compactRoom.matches)movesOpen=false;render();if(chatOpen)fx.flash(document.querySelector('#chat-panel'),'panel-enter',600);break;
-    case 'moves': movesOpen=tab==='rules'||!movesOpen;tab='play';if(movesOpen&&compactRoom.matches)chatOpen=false;render();if(movesOpen)fx.flash(document.querySelector('#move-panel'),'panel-enter',600);break;
+    case 'chat': chatOpen=!chatOpen;render();if(chatOpen)revealPanel('#chat-panel',true);break;
+    case 'moves': movesOpen=tab==='rules'||!movesOpen;tab='play';render();if(movesOpen)revealPanel('#move-panel',false);break;
     case 'copy-moves': {
       const value=(game().history??[]).map(({ply,san},index)=>((ply%2)?Math.ceil(ply/2)+'. ':index===0?Math.ceil(ply/2)+'... ':'')+san).join(' ');
       try {await navigator.clipboard.writeText(value);toast('Mosse copiate.');}
@@ -1508,23 +1545,26 @@ app.addEventListener('keydown',event=>{
 });
 joinButton.insertAdjacentHTML('beforebegin','<button class="outline profile-button" type="button" id="rename-seat" aria-label="Cambia nickname" title="Cambia nickname">'+icon('profile')+'<span>Nickname</span></button>');
 document.querySelector('#rename-seat').onclick=renameDialog;
-compactRoom.addEventListener('change',event=>{
-  if(event.matches&&movesOpen) {movesOpen=false;render();}
-});
 joinButton.insertAdjacentHTML('afterbegin',icon('enter'));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&state)paintChat();});
 function updateEditor(field) {
   const parsed=parseChat(field.value), form=field.form;
   const preview=form.querySelector('.editor-preview'), limit=form.querySelector('.editor-limit');
-  preview.hidden=parsed.text===field.value;
+  preview.hidden=parsed.text===field.value||rich.editorMode()==='rich';
   preview.innerHTML=parsed.html;
   limit.hidden=parsed.text.trim().length<=Number(field.dataset.editorLimit);
   if(field.id==='chat-input')chatDraft=field.value;
 }
-function editSelection(control,tag,emoji) {
+function editSelection(control,tag,emoji,clearColor=false) {
   const field=control.closest('form')?.querySelector('[data-editor-limit]');
   if(!field||field.matches(':disabled'))return;
   const start=field.selectionStart, end=field.selectionEnd, selected=field.value.slice(start,end);
+  if(clearColor) {
+    field.setRangeText(selected.replace(/\[\/?(red|green|blue|violet|amber)\]/g,''),start,end,'select');
+    field.focus();
+    updateEditor(field);
+    return;
+  }
   const open=tag?'['+tag+']':'', close=tag?'[/'+tag+']':'';
   field.setRangeText(emoji??open+selected+close,start,end,'end');
   field.focus();
@@ -1532,17 +1572,91 @@ function editSelection(control,tag,emoji) {
   updateEditor(field);
 }
 document.addEventListener('input',e=>{if(e.target.matches('[data-editor-limit]'))updateEditor(e.target);});
+// ---- Visual editor wiring ----
+let savedSelection={box:null,at:null};
+function syncRich(box) {
+  const field=document.getElementById(box.dataset.for);
+  if(!field)return;
+  field.value=rich.readMarkup(box);
+  if(!box.textContent)box.innerHTML='';
+  updateEditor(field);
+  updateToolbar(box);
+}
+function updateToolbar(box) {
+  const tools=box.closest('form')?.querySelector('.editor-tools');
+  if(!tools)return;
+  const style=rich.selectionStyle(box)??{};
+  for(const button of tools.querySelectorAll('[data-format]'))button.setAttribute('aria-pressed',String(Boolean(style[button.dataset.format])));
+  const sample=tools.querySelector('.color-sample');
+  if(sample)sample.className='color-sample'+(style.color?' chat-color-'+style.color:'');
+}
+function toggleEditorMode(form) {
+  const next=rich.editorMode()==='rich'?'code':'rich';
+  rich.setEditorMode(next);
+  for(const box of document.querySelectorAll('.rich-input')) {
+    const field=document.getElementById(box.dataset.for);
+    if(!field)continue;
+    if(next==='rich')box.innerHTML=rich.richHtml(field.value);
+    box.hidden=next==='code';
+    field.hidden=next==='rich';
+    updateEditor(field);
+  }
+  for(const button of document.querySelectorAll('[data-editor-mode]')) {
+    button.setAttribute('aria-pressed',String(next==='code'));
+    button.title=modeTitle(next);
+  }
+  const box=form?.querySelector('.rich-input'), field=form?.querySelector('[data-editor-limit]');
+  if(next==='rich'&&box)rich.caretToEnd(box);
+  else if(field){field.focus();field.setSelectionRange(field.value.length,field.value.length);}
+}
+document.addEventListener('mousedown',e=>{
+  if(e.target.closest('.editor-tools button,.editor-tools summary')&&document.activeElement?.matches?.('.rich-input'))e.preventDefault();
+});
 document.addEventListener('click',e=>{
-  const button=e.target.closest('[data-format],[data-emoji]');
-  if(!button)return;
-  editSelection(button,button.dataset.format,button.dataset.emoji);
-  if(button.dataset.emoji)button.closest('details').open=false;
+  const control=e.target.closest('[data-format],[data-emoji],[data-color],[data-editor-mode]');
+  if(!control?.closest('.editor-tools'))return;
+  const form=control.closest('form');
+  if(control.hasAttribute('data-editor-mode')){toggleEditorMode(form);return;}
+  const box=form?.querySelector('.rich-input');
+  if(box&&!box.hidden) {
+    if(box.getAttribute('contenteditable')!=='true')return;
+    const saved=savedSelection.box===box?savedSelection.at:null;
+    if(control.dataset.emoji)rich.insertRich(box,control.dataset.emoji,saved);
+    else if(control.dataset.color!==undefined)rich.formatRich(box,'color',control.dataset.color||null,saved);
+    else rich.formatRich(box,control.dataset.format,null,saved);
+    syncRich(box);
+  } else editSelection(control,control.dataset.format??(control.dataset.color||undefined),control.dataset.emoji,control.dataset.color==='');
+  control.closest('details')?.removeAttribute('open');
 });
-document.addEventListener('change',e=>{
-  if(!e.target.matches('.editor-color')||!e.target.value)return;
-  editSelection(e.target,e.target.value);
-  e.target.value='';
+document.addEventListener('input',e=>{if(e.target.matches?.('.rich-input'))syncRich(e.target);});
+document.addEventListener('selectionchange',()=>{
+  const box=document.activeElement?.closest?.('.rich-input');
+  const at=box&&rich.getOffsets(box);
+  if(!at)return;
+  savedSelection={box,at};
+  updateToolbar(box);
 });
+document.addEventListener('keydown',e=>{
+  const box=e.target.closest?.('.rich-input');
+  if(!box||e.isComposing)return;
+  if(e.key==='Enter') {
+    e.preventDefault();
+    if(e.shiftKey&&box.getAttribute('aria-multiline')==='true'){rich.insertRich(box,'\n');syncRich(box);}
+    else if(!e.shiftKey)box.closest('form')?.requestSubmit();
+    return;
+  }
+  const key=e.key.toLowerCase();
+  if((e.ctrlKey||e.metaKey)&&!e.altKey&&['b','i','u'].includes(key)){e.preventDefault();rich.formatRich(box,key);syncRich(box);}
+});
+document.addEventListener('paste',e=>{
+  const box=e.target.closest?.('.rich-input');
+  if(!box)return;
+  e.preventDefault();
+  let text=(e.clipboardData?.getData('text/plain')??'').replace(/\r\n?/g,'\n');
+  if(box.getAttribute('aria-multiline')!=='true')text=text.replace(/\n+/g,' ');
+  if(text){rich.insertRich(box,text);syncRich(box);}
+});
+document.addEventListener('drop',e=>{if(e.target.closest?.('.rich-input'))e.preventDefault();});
 let chatSending=false;
 app.addEventListener('submit',async e=>{
   if(e.target.id!=='chat-form')return;
@@ -1557,8 +1671,9 @@ app.addEventListener('submit',async e=>{
     accept(await api('/chat',{text,id:random(16),format:'basic'},room,seat));
     if(chatDraft===previous) {
       chatDraft='';
-      const input=document.querySelector('#chat-input');
+      const input=document.querySelector('#chat-input'), box=document.querySelector('#chat-input-rich');
       if(input){input.value='';updateEditor(input);}
+      if(box)box.innerHTML='';
     }
   } catch(error){toast(error.message);}
   finally{chatSending=false;}

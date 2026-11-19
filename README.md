@@ -72,6 +72,12 @@ Il pulsante ✦ in alto riduce gli effetti al minimo e la scelta resta nel profi
 - `public/effects.mjs` confronta due stati della stanza e descrive cosa è cambiato. È testato in `test/effects.test.mjs`.
 - `public/motion.mjs` disegna particelle, voli delle carte, spostamenti dei pezzi e annunci.
 
+## Chat, mosse e nickname
+
+Mosse e Chat si aprono in una colonna a destra della partita, alta quanto il tavolo, con la cronologia sopra e la chat sotto. Su schermi stretti la colonna scende sotto il tavolo.
+
+Il campo della chat e quello del nickname mostrano il testo già formattato: seleziona una parte e scegli grassetto, corsivo, sottolineato, barrato o un colore. Con il cursore fermo, lo stile vale per le lettere che scrivi dopo. Ctrl+B, Ctrl+I e Ctrl+U sono le scorciatoie, Maiusc+Invio va a capo nella chat. Il pulsante </> passa alla modalità codice, dove scrivi e vedi i tag come [b]testo[/b] o [red]testo[/red], con l'anteprima sotto. La scelta resta nel profilo del browser.
+
 ## Grafica delle carte
 
 In Scopa scegli Napoletane, Piacentine o Bergamasche dal menu **Mazzo**. L'app usa le scansioni dei fronti e un dorso comune per le carte coperte. La scelta del mazzo rimane nel profilo del browser.

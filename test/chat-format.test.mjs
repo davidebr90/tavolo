@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseChat,renderChatMessage} from '../public/chat-format.mjs';
+import {parseChat,renderChatMessage,segmentsFromMarkup,markupFromSegments,formatRange,insertText,styleAt,visibleLength} from '../public/chat-format.mjs';
 import {create,join,chat,renameSeat,snapshot} from '../src/room.mjs';
 
 test('Basic formatting applies only to selected portions and escapes HTML',()=>{
@@ -29,4 +29,42 @@ test('Changing nickname keeps the historical author and uses the new one for lat
   assert.equal(view.chat[0].author,'Ada');
   assert.equal(view.chat[1].author,'Ada 🎯');
   assert.equal(view.chat[1].format,'basic');
+});
+
+const roundTrip=markup=>markupFromSegments(segmentsFromMarkup(markup));
+test('The visual editor model keeps text and styles through a round trip',()=>{
+  const segments=segmentsFromMarkup('Ciao [b]solo [blue]questa[/blue][/b] [i]aperto');
+  assert.deepEqual(segments,[
+    {text:'Ciao ',style:{}},
+    {text:'solo ',style:{b:true}},
+    {text:'questa',style:{b:true,color:'blue'}},
+    {text:' [i]aperto',style:{}}
+  ]);
+  assert.equal(visibleLength(segments),parseChat('Ciao [b]solo [blue]questa[/blue][/b] [i]aperto').text.length);
+  for(const markup of ['[b]a[i]b[/i][/b]c','[red]x[/red][green]y[/green]','testo semplice','[u][s]due[/s][/u]'])
+    assert.equal(parseChat(roundTrip(markup)).text,parseChat(markup).text);
+  assert.deepEqual(segmentsFromMarkup(roundTrip('[b][red]x[/red][/b]')),segmentsFromMarkup('[b][red]x[/red][/b]'));
+});
+test('Formatting a selection that crosses existing tags produces valid markup',()=>{
+  const segments=formatRange(segmentsFromMarkup('[b]abc[/b]def'),2,5,'i');
+  const markup=markupFromSegments(segments);
+  assert.equal(markup,'[b]ab[i]c[/i][/b][i]de[/i]f');
+  assert.equal(parseChat(markup).html,'<strong>ab<em>c</em></strong><em>de</em>f');
+  assert.equal(markupFromSegments(formatRange(segmentsFromMarkup('[b]abc[/b]'),0,3,'b')),'abc');
+  assert.equal(markupFromSegments(formatRange(segmentsFromMarkup('ab[b]c[/b]'),0,3,'b')),'[b]abc[/b]');
+});
+test('Colours replace each other and the same colour toggles off',()=>{
+  const red=formatRange(segmentsFromMarkup('ciao'),0,4,'color','red');
+  assert.equal(markupFromSegments(red),'[red]ciao[/red]');
+  assert.equal(markupFromSegments(formatRange(red,0,2,'color','blue')),'[blue]ci[/blue][red]ao[/red]');
+  assert.equal(markupFromSegments(formatRange(red,0,4,'color','red')),'ciao');
+  assert.equal(markupFromSegments(formatRange(red,0,4,'color',null)),'ciao');
+});
+test('Typing styles and caret styles follow the surrounding text',()=>{
+  const segments=segmentsFromMarkup('ab[b]cd[/b]');
+  assert.deepEqual(styleAt(segments,0),{});
+  assert.deepEqual(styleAt(segments,3),{b:true});
+  assert.deepEqual(styleAt(segments,2),{});
+  assert.equal(markupFromSegments(insertText(segments,2,'X',{i:true})),'ab[i]X[/i][b]cd[/b]');
+  assert.equal(markupFromSegments(insertText(segments,4,'!',{b:true})),'ab[b]cd![/b]');
 });
