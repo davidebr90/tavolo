@@ -1,6 +1,21 @@
 // Rule cards for the Regole tab. Each section is [title, text or list, kind].
 // kind 'warn' marks penalties and special cases, 'tip' marks strategy advice.
 export const guides={
+  briscola:[
+    ['Il mazzo e la briscola','Ricevi tre carte da un mazzo italiano di quaranta. La carta scoperta sotto il mazzo indica il seme di briscola e viene pescata per ultima. In quattro, i posti 1 e 3 giocano contro i posti 2 e 4.'],
+    ['Come si prende','Gioca una carta qualsiasi. Vince la briscola più alta o, se nessuno gioca briscola, la carta più alta del seme di uscita. In ordine di forza vengono asso, tre, re, cavallo, fante, sette, sei, cinque, quattro e due. Chi prende pesca per primo e apre la presa successiva.'],
+    ['Ultime prese e punti','Esaurito il mazzo, giocate le carte rimaste in mano. L’asso vale 11 punti, il tre 10, il re 4, il cavallo 3 e il fante 2. Gli altri valori valgono zero. Tavolo conta tutti i 120 punti a fine smazzata. Con almeno 61 vinci, sul 60 pari la partita termina in pareggio.']
+  ],
+  'poker-italiano':[
+    ['Invito e apertura','Ognuno parte con 100 fiches virtuali. Ogni mano comincia con un invito di una fiche e cinque carte personali. In due il mazzo va dal nove all’asso. Ogni posto in più aggiunge un valore più basso. Per aprire basta una coppia di fanti o un punto superiore, oppure quattro carte consecutive dello stesso seme completabili a entrambe le estremità. Se tutti passano, il piatto resta e si ridistribuisce. L’apertura sale alle donne e poi ai re.'],
+    ['Accomodo e puntate','Dopo il primo giro, seleziona fino a quattro carte e conferma il cambio. Puoi anche tenere tutte e cinque le carte. Segue un secondo giro di puntate. Il totale del rilancio include quanto hai già messo nel giro.'],
+    ['Punti e vittoria','Allo scontro contano le tue cinque carte. In ordine crescente valgono carta alta, coppia, doppia coppia, tris, scala, full, colore, poker e scala reale. Tra due colori prevale il seme più forte, nell’ordine cuori, quadri, fiori, picche. Tra due scale reali prevale quella più alta, poi decide il seme. Tavolo assegna ciascun piatto ai giocatori che vi hanno contribuito e sono ancora in gioco. Vince la partita chi raccoglie tutte le fiches.']
+  ],
+  'texas-holdem':[
+    ['Buio e controbuio','Da 2 a 10 giocatori partono con 100 fiches virtuali. I bui sono 1 e 2. Il bottone indica il mazziere e si sposta a ogni mano. Nel testa a testa il mazziere paga il piccolo buio e parla per primo prima del flop.'],
+    ['Le cinque carte comuni','Ricevi due carte personali. Dopo il primo giro di puntate si scoprono tre carte sul flop, una sul turn e una sul river. Ogni fase prevede un giro di puntate. Per il tuo punto usa le cinque carte migliori tra le sette disponibili, anche tutte e cinque le comuni.'],
+    ['Azioni e piatti','Con check resti in gioco senza aggiungere fiches. Vedi copre la puntata, rilancia aumenta il totale da raggiungere, lascia abbandona la mano. Puoi impegnare tutte le fiches. Ogni piatto laterale spetta a chi lo ha coperto. Mani della stessa forza dividono il piatto. Chi rimane con tutte le fiches vince la partita.']
+  ],
   chess:[
     ['Obiettivo e turno','Il Bianco apre. Si alterna una mossa a testa. Lo scacco è un attacco al re: puoi allontanare il re, catturare il pezzo che attacca o bloccare la linea, quando possibile. Se nessuna risposta legale elimina lo scacco, è scacco matto e la partita finisce.'],
     ['Come si muovono i pezzi','La torre segue righe e colonne, l’alfiere le diagonali, la donna entrambe. Il cavallo salta a L, anche sopra altre pedine. Il re si sposta di una casella senza entrare sotto attacco. Il pedone avanza di una casella, oppure due dalla partenza se entrambe sono libere. Cattura in diagonale in avanti. Valori indicativi: pedone 1, cavallo e alfiere 3, torre 5, donna 9.'],
@@ -19,6 +34,7 @@ export const guides={
     ['Trucchi',['Tieni il più a lungo possibile le pedine dell’ultima fila: impediscono all’avversario di andare a dama.','Sfrutta la presa obbligatoria: offrire una pedina costringe l’avversario a una presa che può aprirti un colpo multiplo.','Avanza in gruppi compatti. Le pedine isolate si catturano facilmente.','Il centro della damiera lascia più strade aperte.','Nel finale una dama vale circa tre pedine: non rischiarla per una sola.'],'tip']
   ],
   scopa:[
+    ['Mazzo, mano e partita','Una smazzata è un mazzo intero di 40 carte. A due giocatori comprende sei mani da tre carte a testa, nello Scopone una sola distribuzione da dieci. Quando il mazzo da pescare è vuoto si giocano ancora le carte in mano. Dopo l’ultima giocata si assegnano i punti. Se la partita prosegue, si mescola un nuovo mazzo e il punteggio totale resta.'],
     ['Scopone scientifico · 4 giocatori','I posti 1 e 3 giocano contro 2 e 4. Dieci carte a testa, nessuna sul tavolo. Le prese e i punti sono della coppia. Tavolo gioca a 11 punti.'],
     ['Scopa classica · 2 giocatori','Tavolo distribuisce tre carte a testa e dispone quattro carte scoperte. Quando entrambi finiscono le carte in mano, distribuisce altre tre a testa finché c’è mazzo. Asso vale 1, le carte numeriche il proprio numero, fante 8, cavallo 9 e re 10.'],
     ['Prese e priorità','Se giochi un 7 e sul tavolo c’è un 7, devi prendere un solo 7, anche con un 3 e un 4 disponibili. Se manca il 7 puoi prendere il 3 e il 4, o un’altra combinazione che faccia 7. Quando ci sono più prese valide, Tavolo ti fa scegliere e ti mostra in anteprima le carte di ogni presa.'],

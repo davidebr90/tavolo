@@ -34,7 +34,7 @@ export function renameSeat(room,token,name,markup) {
   return true;
 }
 function movedSeats(room) {
-  return room.moved??[0,1].map(side=>Object.keys(room.receipts).some(key=>key.startsWith(side+':')));
+  return room.moved??room.players.map((_,side)=>Object.keys(room.receipts).some(key=>key.startsWith(side+':')));
 }
 function closeRoom(room,side,command) {
   if(command==='request') {
@@ -74,7 +74,22 @@ export function submit(room,token,message) {
 }
 export function snapshot(room,token) {
   const side=seat(room,token);
-  return {side,maxPlayers:capacity(room),players:room.players.map(p=>p.name),playerMarkup:room.players.map(p=>p.markup??null),version:room.version,game:view(room.game,side),chat:room.chat??[],chatVersion:room.chatVersion??0,
+  const maxPlayers=capacity(room), game=view(room.game,side);
+  if(room.players.length<maxPlayers&&Array.isArray(game.hand)) {
+    // A seat sees the intact pack until the last player joins.
+    game.awaitingDeal=true;
+    if('remaining' in game)game.remaining+=game.handCounts.reduce((a,b)=>a+b,0)+(game.table?.length??(game.id==='uno'?1:0));
+    if('table' in game)game.table=[];
+    if('top' in game){game.top='';game.color='';}
+    if('trumpCard' in game)game.trumpCard=null;
+    game.hand=[];
+    game.handCounts=Array(maxPlayers).fill(0);
+    if('opponentCount' in game)game.opponentCount=0;
+    if('legal' in game)game.legal={};
+    if('takes' in game)game.takes={};
+    if('playable' in game)game.playable=[];
+  }
+  return {side,maxPlayers,players:room.players.map(p=>p.name),playerMarkup:room.players.map(p=>p.markup??null),version:room.version,game,chat:room.chat??[],chatVersion:room.chatVersion??0,
     roomName:room.roomName??null,createdAt:room.createdAt??null,
     closed:room.closed===true,closeRequest:room.closeRequest??null,requiresConsent:movedSeats(room).some((value,i)=>value&&i!==side)};
 }

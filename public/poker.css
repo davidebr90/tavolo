@@ -1,0 +1,63 @@
+.poker-felt {
+  padding: clamp(14px, 2.2vw, 38px);
+  background: radial-gradient(ellipse at 35% 30%, #244e41, #112e25 75%);
+  border: 1px solid #52604a;
+  border-radius: 22px;
+  box-shadow: inset 0 0 0 5px #101c1780;
+}
+.poker-felt header, .poker-controls, .poker-raise, .poker-seat > span {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.poker-felt header {justify-content: space-between; border-bottom: 1px solid #f4e5c633; padding-bottom: 14px}
+.poker-felt header span, .poker-seat small, .poker-event {color: #ccd8cb}
+.poker-felt h2 {font-size: clamp(1.6rem, 3vw, 2.8rem); line-height: 1.12; margin: 3px 0}
+.poker-pot {display: grid; justify-items: end}
+.poker-pot strong {color: #f5ce83; font-size: 1.45rem}
+.poker-pot small {font-size: .8rem}
+.poker-layout {display: grid; grid-template-columns: minmax(0, 1fr) minmax(175px, 25%); padding-top: 16px; gap: clamp(14px, 2vw, 34px)}
+.poker-play {min-width: 0}
+.poker-play h3 {margin: 8px 0}
+.poker-play p {margin: 6px 0 12px; line-height: 1.45}
+.community {min-height: 7.5rem; border-bottom: 1px solid #f4e5c633; padding-bottom: 14px}
+.poker-pocket {margin-top: 14px}
+.poker-play :is(.community,.poker-pocket,.poker-event) {text-align: center}
+.poker-play :is(.community,.poker-pocket) .poker-cards, .poker-controls {justify-content: center}
+.poker-cards {display: flex; gap: clamp(3px, .7vw, 12px); align-items: center; flex-wrap: wrap; padding: 3px 0}
+.french-card {
+  position: relative; display: inline-grid; align-content: space-between; justify-items: start;
+  width: clamp(46px, 4.8vw, 102px); aspect-ratio: 5 / 7; padding: .16em .22em;
+  font: 700 clamp(1.12rem, 1.9vw, 2.3rem)/1 Georgia, serif; color: #172528;
+  background: linear-gradient(150deg, #fffdf7, #e9e4d6); border-radius: .19em;
+  border: 1px solid #f9eed7; box-shadow: 0 3px 6px #0005;
+}
+.french-card.suit-D, .french-card.suit-H {color: #9b2b30}
+.french-card i {font-style: normal; font-size: 1.4em; align-self: center; justify-self: center}
+.french-card small {position: absolute; bottom: .24em; right: .24em; font-size: .58em}
+.exchange-card {display: inline-flex; padding: 0; border-radius: .36rem; border: 2px solid transparent; background: transparent}
+.exchange-card[aria-pressed=true] {border-color: #f9d397; transform: translateY(-4px); box-shadow: 0 3px 0 #f9d397}
+.poker-controls {margin-top: 18px; gap: 8px}
+.poker-raise {padding: 5px 8px; background: #101c19; border-radius: 8px; gap: 7px}
+.poker-raise input {width: 5rem; min-width: 0; padding: 6px 4px}
+.poker-seats, .poker-results ul {list-style: none; margin: 0; padding: 0}
+.poker-seats {display: grid; gap: 6px; align-content: start}
+.poker-seat {display: grid; align-content: start; gap: 2px; padding: 8px 10px; background: #081e18a6; border: 1px solid #3c574a; border-radius: 8px; overflow-wrap: anywhere}
+.poker-seat[aria-current=true] {border-color: #dcbc79}
+.poker-seat abbr {text-decoration: none; color: #1d231f; background: #e6c88d; border-radius: 50%; padding: 2px 6px; font: bold .75rem/1.3 sans-serif}
+.poker-seat > b {font-size: .88rem; color: #eac78a}
+.poker-results {margin: 12px 0; padding: 10px 13px; background: #0b251d; border-radius: 8px}
+.poker-results li {display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0}
+.poker-results summary {cursor: pointer; margin-top: 6px}
+.poker-revealed li {flex-direction: column}
+.poker-revealed .french-card {width: 40px; font-size: 1.05rem}
+.poker-scene > i {display: grid; place-content: center; background: #fff1d8; color: #233a33; font: bold 30px Georgia, serif}
+.poker-scene > i:nth-child(2) {color: #9b2b30}
+.playing-card .card-text {font: 700 clamp(.65rem, 1vw, 1rem)/1.2 sans-serif; color: #102721; background: #fff4df; display: grid; place-items: center; width: 100%; height: 100%; white-space: normal; padding: 3px}
+@media (max-width: 700px) {
+  .poker-layout {grid-template-columns: minmax(0, 1fr)}
+  .poker-seats {grid-template-columns: repeat(auto-fit, minmax(min(100%, 112px), 1fr))}
+  .poker-felt {padding: 12px}
+  .poker-raise {max-width: 100%}
+}

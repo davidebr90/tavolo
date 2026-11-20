@@ -35,7 +35,7 @@ test('Duplicate HTTP move requests persist and publish one version',async ()=>{
   assert.equal(r.state(b).game.board[4],1);
   assert.equal((await r.call(token(),'join',{name:'Tre'}))[0],409);
 });
-test('36 concurrent rooms isolate players and state for all twelve games',async ()=>{
+test('36 concurrent rooms isolate players and state for every game',async ()=>{
   await Promise.all(Array.from({length:36},async (_,i)=>{
     const r=room(),a=token(),b=token(),game=games[i%games.length];
     assert.equal((await r.call(a,null,{game,name:'Giocatore '+i}))[1].game.id,game);

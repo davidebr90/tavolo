@@ -9,6 +9,7 @@ export function motionLevel() {return reduce.matches||stored()==='calm'?'calm':'
 export const lively=()=>motionLevel()==='full';
 export function applyMotionLevel() {
   if(typeof document!=='undefined')document.documentElement.dataset.motion=motionLevel();
+  if(!lively())cancelCardFlights();
 }
 export function setMotionLevel(level) {
   try {localStorage.setItem(KEY,level==='calm'?'calm':'full');} catch {}
@@ -239,9 +240,25 @@ export function vanish(rect,content,{host='',delay=0,duration=620,drift=-26}={})
   ],{duration,delay,easing:'cubic-bezier(.3,.1,.3,1)',fill:'both'}).finished.catch(()=>{}).finally(()=>box.remove());
 }
 
-// A card flying between two rectangles, optionally flipping from its back to its face.
-export function flight({face,back='',from,to,delay=0,duration=640,flip=false,hide=null,tilt=0,shrink=false}) {
-  if(!lively()||!from?.width||!to?.width)return;
+// Room renders replace their DOM. Reapply each destination mask to its new element.
+const cardFlights=new Set();
+export function syncCardFlights(scope) {
+  for(const card of cardFlights) {
+    if(card.scope===scope)card.mask();
+    else card.finish();
+  }
+}
+export function cancelCardFlights() {
+  for(const card of cardFlights)card.finish();
+}
+if(typeof window!=='undefined') {
+  window.addEventListener('resize',cancelCardFlights,{passive:true});
+  window.addEventListener('scroll',cancelCardFlights,{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelCardFlights();});
+}
+
+export function flight({face,back='',from,to,delay=0,duration=640,flip=false,arrival,scope,hold=false,tilt=0,shrink=false}) {
+  if(!lively()||!from?.width||!to?.width||typeof Element.prototype.animate!=='function')return;
   const el=document.createElement('div');
   el.className='fx-card';
   el.setAttribute('aria-hidden','true');
@@ -249,23 +266,33 @@ export function flight({face,back='',from,to,delay=0,duration=640,flip=false,hid
   el.style.height=to.height+'px';
   el.innerHTML='<div class="fx-card-inner'+(flip?' is-flipping':'')+'">'+(flip?'<div class="fx-face fx-back">'+back+'</div><div class="fx-face fx-front">'+face+'</div>':'<div class="fx-face">'+face+'</div>')+'</div>';
   document.body.append(el);
-  if(hide)hide.style.visibility='hidden';
-  const s0=Math.max(.2,Math.min(2,from.width/to.width));
+  let masked=[];
+  const mask=()=>{
+    masked=arrival?.().filter(Boolean)??[];
+    masked.forEach(node=>node.classList.add('awaiting-card'));
+  };
+  mask();
+  const s0=from.width/to.width;
   const x0=from.left+from.width/2-to.width/2, y0=from.top+from.height/2-to.height/2;
   const x1=to.left, y1=to.top, lift=Math.max(36,Math.hypot(x1-x0,y1-y0)*.22);
   const spin=tilt||rand(-14,14), end=shrink?.94:1;
-  el.animate([
-    {transform:`translate(${x0}px,${y0}px) rotate(${-spin}deg) scale(${s0})`,opacity:0},
+  const animation=el.animate([
+    {transform:`translate(${x0}px,${y0}px) rotate(${hold?0:-spin}deg) scale(${s0})`,opacity:hold?1:0},
     {transform:`translate(${x0}px,${y0-6}px) rotate(${-spin}deg) scale(${s0*1.05})`,opacity:1,offset:.08},
     {transform:`translate(${(x0+x1)/2}px,${Math.min(y0,y1)-lift}px) rotate(${spin/2}deg) scale(${(s0+1)/2*1.12})`,offset:.52},
     {transform:`translate(${x1}px,${y1}px) rotate(0deg) scale(${end})`,opacity:1,offset:.9},
     {transform:`translate(${x1}px,${y1}px) rotate(0deg) scale(${end})`,opacity:shrink?0:1}
-  ],{duration,delay,easing:'cubic-bezier(.35,.6,.25,1)',fill:'both'}).finished.catch(()=>{}).finally(()=>{
+  ],{duration,delay,easing:'cubic-bezier(.35,.6,.25,1)',fill:'both'});
+  const card={scope,mask,finish(){
+    if(!cardFlights.delete(card))return;
+    animation.cancel();
     el.remove();
-    if(hide)hide.style.visibility='';
-  });
+    masked.forEach(node=>node.classList.remove('awaiting-card'));
+  }};
+  cardFlights.add(card);
+  animation.finished.then(card.finish,card.finish);
   if(flip) el.firstElementChild.animate([{transform:'rotateY(0deg)'},{transform:'rotateY(180deg)'}],
-    {duration:duration*.5,delay:delay+duration*.28,easing:'cubic-bezier(.5,0,.3,1)',fill:'both'});
+    {duration:duration*.22,delay:delay+duration*.76,easing:'ease-out',fill:'both'});
 }
 
 // ---- Announcements -----------------------------------------------------
