@@ -1,6 +1,6 @@
 # Tavolo
 
-Scacchi, Battaglia navale, Forza 4, Reversi, Tris, Dama italiana, Scopa, UNO, Backgammon, Go, Nim e Punti e quadrati. Stanze da 2 giocatori per i duelli, da 2 a 10 per UNO e da 4 per lo Scopone scientifico a coppie, inviti con link, partite senza orologio e tab **Regole** con fonti per ogni titolo.
+Quindici giochi multiplayer con invito tramite link. La sala carte comprende Scopa e Scopone scientifico, UNO, Briscola, Poker italiano e Poker Texas Hold’em. Gli altri tavoli sono Scacchi, Battaglia navale, Forza 4, Reversi, Tris, Dama italiana, Backgammon, Go, Nim e Punti e quadrati. Ogni stanza include la scheda **Regole**, la chat e il ripristino della partita.
 
 ## Gioca a Tavolo
 
@@ -60,6 +60,17 @@ I test coprono motori, accesso ai posti, mosse concorrenti e duplicate e isolame
 
 ## Varianti amichevoli
 
+| Gioco di carte | Posti | Come si conclude |
+| --- | --- | --- |
+| Scopa | 2 | Ogni mazzo comprende sei distribuzioni di tre carte a testa. Dopo l’ultima si contano i punti. La partita termina a 11 o più con un vantaggio. |
+| Scopone scientifico | 4, a coppie | Dieci carte per posto in una sola distribuzione. Il punteggio si conta a mazzo concluso. |
+| Briscola | 2 oppure 4 a coppie | Si giocano tutte le quaranta carte. Vince chi prende almeno 61 dei 120 punti. A 60 pari si pareggia. |
+| Poker italiano | 2–6 | Cinque carte coperte, invito di una fiche, apertura e un cambio fino a quattro carte. Vince chi raccoglie le fiches del tavolo. |
+| Poker Texas Hold’em | 2–10 | Due carte personali, cinque comuni, bui 1/2, puntate no-limit e piatti laterali. Vince l’ultimo giocatore con fiches. |
+| UNO | 2–10 | Si gioca una mano. Vince chi finisce le carte per primo. |
+
+Entrambi i poker usano 100 fiches virtuali per posto, senza acquisti né premi. Ogni giocatore riceve soltanto la propria mano. Allo scontro si scoprono le mani ancora in gioco. Dopo l’assegnazione dei piatti, il giocatore indicato dal turno può avviare la mano successiva.
+
 Scacchi riconosce le comuni posizioni di materiale insufficiente. La richiesta di patta si basa sulla posizione già raggiunta. Dama usa il conteggio automatico delle 40 mosse per lato di sole dame senza catture. Battaglia navale usa un colpo per turno. UNO usa una mano singola con dichiarazione automatica e validazione server del +4. Backgammon usa una partita singola senza cubo. Go usa la griglia 9×9 e conta l'area dopo due passaggi consecutivi. I gruppi morti vanno catturati sulla griglia prima di passare. Le schede Regole riportano queste scelte.
 
 ## Struttura
@@ -84,12 +95,16 @@ Il pulsante ✦ in alto riduce gli effetti al minimo e la scelta resta in questo
 
 ## Il tavolo da carte
 
-Scopa, Scopone e UNO si giocano a un tavolo ovale. Tu siedi in basso e gli altri giocatori sono disposti attorno, in senso orario a partire dalla tua sinistra, ognuno con il ventaglio delle sue carte coperte. Un segnalino d'ottone sul feltro indica chi è di turno.
+Scopa, Scopone, Briscola, UNO, Poker italiano e Texas Hold'em si giocano a un tavolo ovale. Tu siedi in basso e gli altri giocatori sono disposti attorno, in senso orario a partire dalla tua sinistra, ognuno con le sue carte coperte. Un segnalino d'ottone sul feltro indica chi è di turno; nel poker al suo posto c'è il bottone del mazziere, che scivola al giocatore successivo a ogni mano.
 
 - Chi gioca una carta la lancia con la mano: la carta scivola ruotando fino al suo posto. In una presa la mano del giocatore raccoglie le carte e le porta al suo mazzetto.
 - In Scopa i punti sono fiches. A fine smazzata il banco paga una fiche per ogni punto, e ogni scopa vale subito una fiche d'oro.
+- In Briscola la carta di briscola resta scoperta sotto il tallone. La presa finita rimane sul feltro finché chi l'ha vinta non la raccoglie per aprire la successiva.
 - In UNO chi pesca allunga la mano sul mazzo. Puoi pescare cliccando il mazzo, e le frecce sul feltro mostrano il verso del giro.
+- Nel poker ogni giocatore ha le sue fiches sulla targhetta, in pile per valore (1 avorio, 5 rosse, 25 verdi, 100 nere). Chi punta spinge le fiches davanti a sé, chi passa bussa sul feltro, chi lascia getta le carte verso il mazzo. A giro chiuso le puntate scivolano nel piatto, e allo showdown il piatto va al vincitore con le mani scoperte accanto ai nomi.
 - Nei giochi a due l'avversario siede sopra la plancia e tu sotto, o ai due angoli quando c'è spazio a lato.
+
+Le animazioni seguono il tavolo anche mentre la pagina scorre. `public/poker-table.mjs` disegna il tavolo da poker e `public/briscola.mjs` quello di Briscola; mani, carte e fiches in movimento sono in `public/motion.mjs`.
 
 ## Chat, mosse e nickname
 
@@ -99,7 +114,7 @@ Il campo della chat e quello del nickname mostrano il testo già formattato: sel
 
 ## Grafica delle carte
 
-In Scopa scegli Napoletane, Piacentine o Bergamasche dal menu **Mazzo**. L'app usa le scansioni dei fronti e un dorso comune per le carte coperte. La scelta del mazzo resta in questo browser.
+In Scopa e Briscola scegli Napoletane, Piacentine o Bergamasche dal menu **Mazzo**. L'app usa le scansioni dei fronti e un dorso comune per le carte coperte. La scelta del mazzo resta in questo browser. La distribuzione scopre ogni carta all’arrivo. Riprendendo una stanza già avviata si vede la posizione corrente. Il poker usa carte francesi disegnate con testo e CSS.
 
 ## Licenza
 

@@ -1,0 +1,101 @@
+/* Poker at the oval table: French cards, chips, bets on the felt and the dealer button. */
+.poker-table{--felt-h:clamp(250px,calc(100dvh - 560px),400px)}
+.poker-table .table-stage{padding:46px clamp(34px,6.5vw,84px) 30px}
+.table-poker-italiano .table-felt{background:radial-gradient(90% 120% at 50% 0%,#2f6f9c,#153f5e 55%,#0a2233)}
+.poker-table .felt-grid{padding-block:34px 30px}
+.poker-table .card-center .card-line{min-height:0}
+.poker-table .card-center .card-line.community{min-height:clamp(58px,min(10vw,15dvh),116px)}
+
+/* French cards scale with their own width, wherever they lie. */
+.french-card{--card-w:64px;container-type:inline-size;position:relative;display:block;flex:none;width:var(--card-w);aspect-ratio:5/7;border-radius:7%;
+  font-family:Georgia,'Times New Roman',serif;color:#1c2428;background:linear-gradient(155deg,#fffefa,#ece6d6);user-select:none;
+  box-shadow:inset 0 0 0 1px rgb(0 0 0 / 14%),0 1px 2px rgb(0 0 0 / 45%),0 9px 14px -8px rgb(0 0 0 / 75%)}
+.french-card.suit-D,.french-card.suit-H{color:#b3262e}
+.french-card u{display:block;text-decoration:none;font-size:.86em;line-height:.9}
+.french-card>b,.french-card>small{position:absolute;display:grid;justify-items:center;font-size:27cqi;font-weight:700;line-height:.95;letter-spacing:-.05em}
+.french-card>b{left:7cqi;top:6cqi}
+.french-card>small{right:7cqi;bottom:6cqi;rotate:180deg}
+.french-card>i{position:absolute;inset:0;display:grid;place-items:center;font-style:normal;font-size:54cqi;line-height:1}
+.fx-face>.french-card{width:100%;height:100%;aspect-ratio:auto;box-shadow:none}
+.pile-back.poker{background:radial-gradient(circle,#f6eedd 0 11%,transparent 12%),
+  repeating-linear-gradient(45deg,rgb(255 255 255 / 24%) 0 1.5px,transparent 1.5px 6px),repeating-linear-gradient(-45deg,rgb(255 255 255 / 24%) 0 1.5px,transparent 1.5px 6px),
+  linear-gradient(160deg,#b22d3a,#74131f)}
+.board-card{display:inline-grid;rotate:var(--tilt,0deg)}
+.community .french-card{--card-w:clamp(40px,min(6.6vw,10dvh),80px)}
+.board-hint{max-width:28ch;font:italic .86rem var(--display);color:rgb(246 238 221 / 55%)}
+.poker-event{margin:8px 0 0;font-size:.82rem;color:rgb(246 238 221 / 80%)}
+
+/* The player's own cards */
+.hand.pocket{--spread:4deg;gap:clamp(4px,.8vw,10px)}
+.hand.pocket .french-card{--card-w:clamp(56px,min(10.5vw,14.5dvh),108px)}
+.pocket-card,.exchange-card{display:inline-grid;flex:none;padding:0;border:0;border-radius:7%;background:none}
+.exchange-card{cursor:pointer}
+.exchange-card[aria-pressed=true]::after{content:'Cambia';position:absolute;left:50%;bottom:8%;translate:-50%;padding:1px 8px;border-radius:999px;background:var(--brass-hi);color:#20150a;font:800 .66rem var(--text);letter-spacing:.04em;text-transform:uppercase}
+.exchange-card[aria-pressed=true] .french-card{filter:brightness(.82)}
+
+/* Chips: each value has its colour, stacked in columns of five. */
+.chip-pile{--chip-size:20px;display:inline-flex;align-items:flex-end;gap:2px}
+.chip-pile.mini{--chip-size:13px;gap:1px}
+.chip-pile.mini .chip-stack{height:calc(var(--chip-size) + (var(--n) - 1) * 3px)}
+.chip-pile.mini .chip{bottom:calc(var(--i) * 3px);box-shadow:inset 0 0 0 1px rgb(0 0 0 / 30%),0 1.5px 0 color-mix(in oklab,var(--chip),black 42%),0 2px 2px rgb(0 0 0 / 45%)}
+.chip-pile.mini .chip::after{display:none}
+.poker-pot{display:grid;justify-items:center;gap:7px;min-width:96px;padding:10px 12px;border-radius:18px;font-size:.76rem;line-height:1.15;text-align:center;
+  background:rgb(0 0 0 / 22%);box-shadow:inset 0 0 0 1px rgb(244 220 156 / 30%)}
+.poker-pot b{display:block;font:700 1.4rem var(--display);font-variant-numeric:tabular-nums;color:var(--brass-hi)}
+.poker-pot .chip-pile{min-height:24px}
+.bet-spot{position:absolute;z-index:2;left:calc(50% + var(--bx) * 1%);top:calc(50% + var(--by) * 1%);translate:-50% -50%;display:inline-flex;align-items:flex-end;gap:5px;min-width:13px;min-height:13px;pointer-events:none}
+.bet-spot b{padding:1px 7px;border-radius:999px;background:rgb(0 0 0 / 58%);font:700 .76rem var(--text);font-variant-numeric:tabular-nums;color:#fff}
+
+/* Seats: cards peek out behind the name plate, chips stand on it. */
+.poker-table .seat-info{max-width:19ch}
+.poker-table .stack-amount{font-weight:800;font-variant-numeric:tabular-nums;color:var(--brass-hi)}
+.seat-stack{display:inline-flex;align-items:flex-end;margin-left:2px}
+.poker-table .seat-cards{position:absolute;left:50%;bottom:calc(100% - 10px);z-index:-1;height:auto;margin:0;translate:-50%}
+.poker-table .seat-cards .pile-back{width:22px;height:31px;margin-inline:-4px;rotate:calc(var(--o) * 9deg);translate:0 calc(var(--o) * var(--o) * 1.4px);transform-origin:50% 130%}
+.poker-table .seat-cards.shown{bottom:calc(100% - 6px);z-index:1}
+.seat-cards .reveal{display:inline-grid;margin-inline:-3px;rotate:calc(var(--o) * 5deg);translate:0 calc(var(--o) * var(--o) * 1px);transform-origin:50% 130%}
+.seat-cards .reveal .french-card{--card-w:30px}
+.seat-cards .reveal .french-card>b{font-size:40cqi;left:8cqi;top:7cqi}
+.seat-cards .reveal .french-card>i{inset:42% 0 0 34%;font-size:44cqi}
+.seat-cards .reveal .french-card>small{display:none}
+.seat.folded .seat-plate{opacity:.55;filter:saturate(.35)}
+.seat.winner .seat-plate{border-color:var(--brass-hi);box-shadow:0 0 0 2px var(--brass),0 0 34px rgb(244 220 156 / 80%),0 10px 20px -8px #000}
+.poker-table .table-seats.compact .seat-plate{min-height:42px;padding:4px 11px 4px 4px}
+.poker-table .table-seats.compact .seat-info{display:grid;max-width:11ch}
+.turn-chip.dealer-button{background:radial-gradient(circle at 35% 30%,#fff,#efe9da 55%,#b3aa94);box-shadow:inset 0 0 0 2px rgb(255 255 255 / 60%),inset 0 0 0 3px rgb(0 0 0 / 22%),0 3px 0 #7d7665,0 7px 10px rgb(0 0 0 / 55%);animation:none}
+.turn-chip.dealer-button::after{content:'D';font:800 .86rem var(--text);color:#1c2428}
+
+/* Actions under the table */
+.poker-controls{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px;margin-top:var(--space-3)}
+.poker-raise{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;padding:7px 10px;border-radius:16px;border:1px solid var(--line);background:rgb(0 0 0 / 26%)}
+.poker-raise label{font-size:.84rem;font-weight:700;color:var(--muted)}
+.poker-raise input{width:5.6rem;min-width:0;padding:7px 8px;text-align:center;font-variant-numeric:tabular-nums}
+.raise-quick{display:flex;flex-basis:100%;flex-wrap:wrap;justify-content:center;gap:4px 14px}
+.raise-quick button{padding:2px 4px;border:0;background:none;color:var(--brass-hi);font:600 .78rem var(--text);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.poker-results{max-width:640px;margin:var(--space-3) auto 0;padding:12px 16px;border-radius:16px;border:1px solid var(--line);background:rgb(0 0 0 / 26%);color:var(--ink)}
+.poker-results h3{margin:0 0 6px;font:italic 700 1rem var(--display);color:var(--brass-hi)}
+.poker-results ul{display:grid;gap:4px;list-style:none;margin:0;padding:0}
+.poker-results li{display:flex;flex-wrap:wrap;gap:2px 10px;font-size:.9rem}
+.poker-scene>i{display:grid;place-content:center;background:#fff1d8;color:#233a33;font:bold 30px Georgia,serif}
+.poker-scene>i:nth-child(2){color:#9b2b30}
+.playing-card .card-text{display:grid;place-items:center;width:100%;height:100%;padding:3px;white-space:normal;font:700 clamp(.65rem,1vw,1rem)/1.2 sans-serif;color:#102721;background:#fff4df}
+
+@container match (max-width:680px){
+  .poker-table .table-stage{padding:46px 30px 30px}
+  .poker-table .felt-grid{padding-block:92px 72px;column-gap:clamp(20px,9cqi,56px)}
+  /* Deck and pot move to the middle, leaving the sides of the felt to the bets. */
+  .poker-table .felt-side.left{justify-content:flex-end}
+  .poker-table .felt-side.right{justify-content:flex-start}
+  .poker-table .seat-stack{display:none}
+  /* The dealer button keeps clear of the name plates crowding the corners. */
+  .poker-table .turn-chip{left:calc(50% + var(--cx) * .66%)}
+  .poker-table .seat:not(.me) :is(.seat-info strong,.stack-unit){display:none}
+  .poker-table .seat:not(.me) .seat-plate{padding-right:10px;gap:6px}
+  .poker-table .seat-info small{font-size:.74rem}
+  .poker-table .seat-cards .pile-back{width:17px;height:24px}
+  .seat-cards .reveal .french-card{--card-w:24px}
+  .poker-pot{min-width:0;padding:7px 10px}
+  .poker-pot .chip-pile{--chip-size:15px}
+  .bet-spot{top:calc(50% + var(--by) * 1.22%)}
+  .bet-spot b{font-size:.7rem;padding-inline:5px}
+}

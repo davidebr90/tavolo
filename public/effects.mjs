@@ -1,7 +1,41 @@
 // Turns two consecutive room snapshots into a list of visual events.
 // Pure data in, pure data out: the DOM side lives in motion.mjs and app.mjs.
 
+import { isTeamRoom } from './rooms.mjs';
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+
+// An initial snapshot from a restored tab describes the table as it is now.
+// A last-seat join or one consecutive move can describe cards in transit.
+export function cardTransition(prev,next,joining=false) {
+  const b=next.game, a=prev?.game, capacity=next.maxPlayers??2;
+  if(!['scopa','briscola','uno'].includes(b.id)||next.closed||next.players.length!==capacity)return null;
+  if(prev&&(prev.version+1!==next.version||a.id!==b.id))return null;
+  const opening=!b.last&&(prev?prev.players.length<capacity:joining);
+  if(!opening&&(!a||prev.players.length!==capacity||!b.last))return null;
+  const newRound=b.id==='scopa'&&a&&a.round!==b.round;
+  const changed=!opening&&!same(a.last,b.last);
+  const played=changed&&(b.id==='scopa'||b.last.type==='play')?b.last:null;
+  const dealAll=opening||newRound;
+  const table=dealAll?(b.id==='scopa'?b.table:b.id==='uno'?[b.top]:[]):[];
+  const hand=dealAll?b.hand:b.hand.filter(c=>!a.hand.includes(c));
+  const counts=g=>g.handCounts??(next.side===0?[g.hand.length,g.opponentCount]:[g.opponentCount,g.hand.length]);
+  const before=dealAll?[]:counts(a);
+  const draws=counts(b).map((count,seat)=>dealAll?count:Math.max(0,count-before[seat]+Number(played?.side===seat)));
+  if(!played&&!table.length&&!draws.some(Boolean))return null;
+  return {played,table,hand,draws,newRound:!!newRound};
+}
+
+export function scopaProgress(g) {
+  const four=g.handCounts?.length===4;
+  const hand=four?1:6-g.remaining/6, total=four?1:6;
+  const left=(g.handCounts??[g.hand.length,g.opponentCount]).reduce((n,x)=>n+x,0);
+  const label=four?'Distribuzione unica':'Mano '+hand+' di '+total;
+  if(g.result!==null)return {label,detail:'Mazzo concluso. Punteggio finale assegnato.'};
+  const remaining=left+(left===1?' giocata rimasta. ':' giocate rimaste. ');
+  if(four)return {label,detail:'Dieci carte a testa all’inizio. '+remaining+'Poi si contano i punti del mazzo.'};
+  const next=g.remaining?'Poi si distribuiscono altre 3 carte a testa.':'Poi si contano i punti del mazzo.';
+  return {label,detail:(g.remaining?'':'Mazzo da pescare esaurito · Ultima mano · ')+remaining+next};
+}
 
 export function seatHasTurn(room,seat) {
   const g=room?.game;
@@ -113,6 +147,7 @@ export function moveEffects(prev,next) {
   const out=[];
   if(!prev?.game||!next?.game||prev.game.id!==next.game.id||!(next.version>prev.version))return out;
   const a=prev.game, b=next.game, side=next.side, capacity=next.maxPlayers??2;
+  if(['scopa','briscola','uno'].includes(b.id)&&next.version!==prev.version+1)return out;
   if(prev.players.length<capacity&&next.players.length===capacity)out.push({type:'start'});
   else if(a.result!==null&&b.result===null&&!next.closed)out.push({type:'start',rematch:true});
   else if(next.players.length>prev.players.length)out.push({type:'join',seat:next.players.length-1});
@@ -120,7 +155,7 @@ export function moveEffects(prev,next) {
   else if(b.last&&!same(a.last,b.last))out.push(...gameEffects(a,b,side));
   if(b.id==='chess'&&b.check&&b.result===null&&!same(a.last,b.last))out.push({type:'check',at:kingSquare(b.board,b.turn)});
   if(a.result===null&&b.result!==null&&!next.closed) {
-    const mine=b.result===(b.id==='scopa'?side%2:side);
+    const mine=b.result===(isTeamRoom(next)?side%2:side);
     out.push({type:'result',outcome:b.result==='draw'?'draw':mine?'win':'loss'});
   }
   if(!prev.closed&&next.closed)out.push({type:'closed'});

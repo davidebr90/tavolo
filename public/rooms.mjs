@@ -7,10 +7,12 @@ export function savedSeats() {
   }
   return rooms;
 }
+export const isTeamRoom=room=>room.maxPlayers===4&&['scopa','briscola'].includes(room.game.id);
+
 export function roomStatus(state) {
   const {game,players,side}=state;
   if(state.closed) return {label:'Partita chiusa',tone:'done'};
-  if(game.result!==null) return {label:game.result==='draw'?'Pareggio':game.result===(game.id==='scopa'?side%2:side)?'Hai vinto':'Partita conclusa',tone:'done'};
+  if(game.result!==null) return {label:game.result==='draw'?'Pareggio':game.result===(isTeamRoom(state)?side%2:side)?'Hai vinto':'Partita conclusa',tone:'done'};
   if(state.closeRequest!=null) return state.closeRequest===side
     ? {label:'Chiusura in attesa',tone:'waiting'} : {label:'Rispondi alla chiusura',tone:'your'};
   if(players.length<(state.maxPlayers??2)) return {label:'In attesa',tone:'waiting'};
@@ -37,13 +39,19 @@ export function roomTransport(config) {
 }
 export function watchRoom(room,transport,receive,fetchState,{interval=5000,onError=()=>{}}={}) {
   let socket, timer, retry=500, closed=false, handshake, reconnect;
-  let polling=false;
+  let polling=false, received=false, needsResync=false;
+  function deliver(state) {
+    const update={reconnect:needsResync};
+    received=true;
+    needsResync=false;
+    receive(state,update);
+  }
   async function poll() {
     if(closed||ready||polling)return;
     polling=true;
     try {
       const state=await fetchState();
-      if(!closed&&!ready)receive(state);
+      if(!closed&&!ready)deliver(state);
     } catch(error) {
       if(!closed&&!ready)onError(error);
     } finally {
@@ -72,10 +80,11 @@ export function watchRoom(room,transport,receive,fetchState,{interval=5000,onErr
       ready=true;
       retry=500;
       clearTimeout(timer);
-      receive(JSON.parse(e.data));
+      deliver(JSON.parse(e.data));
     };
     socket.onclose=()=>{
       clearTimeout(handshake);
+      if(ready||!received)needsResync=true;
       ready=false;
       if(closed)return;
       clearTimeout(timer);

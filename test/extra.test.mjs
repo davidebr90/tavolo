@@ -5,11 +5,47 @@ import {create, join, chat, submit, snapshot} from '../src/room.mjs';
 import {guides} from '../public/guides.mjs';
 import {catalog} from '../public/catalog.mjs';
 
-test('Catalog entries are playable and arranged in multiples of three',()=>{
-  assert.equal(games.length,12);
+test('Every game in the catalog has a playable room and a guide',()=>{
+  for(const id of ['briscola','poker-italiano','texas-holdem'])assert.ok(games.includes(id),id);
   assert.deepEqual([...games].sort(),Object.keys(catalog).sort());
   assert.deepEqual([...games].sort(),Object.keys(guides).sort());
   for(const sections of Object.values(guides))assert.ok(sections.length>=3);
+});
+
+test('New card rooms wait for every seat, keep hands private and resume after a move',()=>{
+  for(const [id,players] of [['briscola',4],['poker-italiano',6],['texas-holdem',10]]) {
+    const room=create(id,'Posto 1','seat0',{players});
+    const before=snapshot(room,'seat0');
+    assert.equal(before.maxPlayers,players);
+    assert.deepEqual(before.game.hand,[]);
+    assert.ok(!Object.keys(before.game.legal??{}).length);
+    assert.throws(()=>submit(room,'seat0',{id:'early',version:0,action:{}}),/attende/);
+    for(let n=1;n<players;n++)join(room,'Posto '+(n+1),'seat'+n);
+    const side=room.game.turn, token='seat'+side, mine=snapshot(room,token).game;
+    assert.ok(mine.hand.length);
+    const others=snapshot(room,'seat'+((side+1)%players)).game;
+    assert.ok(others.hand.every(card=>!mine.hand.includes(card)));
+    for(const key of ['stock','deck','hands'])assert.equal(key in others,false);
+    const message={id:'action1',version:room.version,action:id==='briscola'?{card:mine.hand[0]}:mine.legal.call?{type:'call'}:{type:'check'}};
+    assert.equal(submit(room,token,message),true);
+    const restored=JSON.parse(JSON.stringify(room));
+    assert.equal(submit(restored,token,message),false);
+    assert.deepEqual(snapshot(restored,token),snapshot(room,token));
+  }
+});
+
+test('An incomplete room exposes the intact pack and no opening cards',()=>{
+  for(const [id,total] of [['scopa',40],['uno',108],['briscola',40]]) {
+    const room=create(id,'Ada','host',{players:4});
+    const {game}=snapshot(room,'host');
+    assert.equal(game.remaining,total);
+    assert.equal(game.awaitingDeal,true);
+    assert.deepEqual(game.hand,[]);
+    assert.ok(!game.table?.length&&!game.top&&game.trumpCard==null);
+    for(let i=1;i<4;i++)join(room,'Guest '+i,'guest'+i);
+    assert.ok(snapshot(room,'host').game.hand.length);
+    assert.ok(!snapshot(room,'host').game.awaitingDeal);
+  }
 });
 test('Nim can remove counters from one pile and ends on the last counter',()=>{
   const s={...start('nim'),piles:[0,0,2,0]};
