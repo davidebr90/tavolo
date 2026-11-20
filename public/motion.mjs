@@ -195,6 +195,24 @@ export function shake(el,strength=6) {
     {transform:`translate(${-s/2}px,${s/3}px)`},{transform:`translate(${s/3}px,0)`},{transform:'none'}],{duration:420,easing:'ease-out'});
 }
 
+// The app re-renders by replacing the DOM. An element hidden while its ghost travels is
+// tracked by selector, so a re-render in the middle of the trip does not show it twice.
+const concealed=new Map();
+let concealId=0;
+function concealWhile(el,selector,done) {
+  if(el)el.style.visibility='hidden';
+  const id=++concealId;
+  if(selector)concealed.set(id,selector);
+  return Promise.resolve(done).catch(()=>{}).finally(()=>{
+    concealed.delete(id);
+    if(el?.isConnected)el.style.visibility='';
+    if(selector&&![...concealed.values()].includes(selector))for(const other of document.querySelectorAll(selector))other.style.visibility='';
+  });
+}
+export function reconceal(root=document) {
+  for(const selector of new Set(concealed.values()))for(const el of root.querySelectorAll(selector))el.style.visibility='hidden';
+}
+
 function ghostBox(rect,content,host='') {
   const box=document.createElement('div');
   box.className='fx-ghost '+host;
@@ -209,11 +227,10 @@ function ghostBox(rect,content,host='') {
 const place=(r,scale=1,lift=0)=>`translate(${r.left}px,${r.top-lift}px) scale(${scale})`;
 
 // Moves a clone of `el` through the given rectangles, then reveals the original.
-export function travel(el,rects,{duration=440,arc=0,lift=1.14,host=''}={}) {
+export function travel(el,rects,{duration=440,arc=0,lift=1.14,host='',conceal=''}={}) {
   if(!lively()||!el||rects.length<2||rects.some(r=>!r?.width))return Promise.resolve();
   const end=rects.at(-1);
   const box=ghostBox(end,el.cloneNode(true),host);
-  el.style.visibility='hidden';
   const legs=rects.length-1, frames=[{transform:place(rects[0]),offset:0}];
   frames.push({transform:place(rects[0],lift,4),offset:.1/legs});
   rects.slice(1).forEach((r,i)=>{
@@ -223,8 +240,9 @@ export function travel(el,rects,{duration=440,arc=0,lift=1.14,host=''}={}) {
   });
   frames.push({transform:place(end,.96),offset:.93},{transform:place(end),offset:1});
   frames.sort((a,b)=>a.offset-b.offset);
-  return box.animate(frames,{duration:duration*legs+120,easing:'cubic-bezier(.3,.6,.25,1)',fill:'both'}).finished
-    .catch(()=>{}).finally(()=>{box.remove();el.style.visibility='';});
+  const done=box.animate(frames,{duration:duration*legs+120,easing:'cubic-bezier(.3,.6,.25,1)',fill:'both'}).finished
+    .catch(()=>{}).finally(()=>box.remove());
+  return concealWhile(el,conceal,done);
 }
 
 // A piece leaving the board: lifts, spins and dissolves where it stood.
@@ -240,7 +258,7 @@ export function vanish(rect,content,{host='',delay=0,duration=620,drift=-26}={})
 }
 
 // A card flying between two rectangles, optionally flipping from its back to its face.
-export function flight({face,back='',from,to,delay=0,duration=640,flip=false,hide=null,tilt=0,shrink=false}) {
+export function flight({face,back='',from,to,delay=0,duration=640,flip=false,hide=null,conceal='',tilt=0,shrink=false,spin=null}) {
   if(!lively()||!from?.width||!to?.width)return;
   const el=document.createElement('div');
   el.className='fx-card';
@@ -249,23 +267,161 @@ export function flight({face,back='',from,to,delay=0,duration=640,flip=false,hid
   el.style.height=to.height+'px';
   el.innerHTML='<div class="fx-card-inner'+(flip?' is-flipping':'')+'">'+(flip?'<div class="fx-face fx-back">'+back+'</div><div class="fx-face fx-front">'+face+'</div>':'<div class="fx-face">'+face+'</div>')+'</div>';
   document.body.append(el);
-  if(hide)hide.style.visibility='hidden';
   const s0=Math.max(.2,Math.min(2,from.width/to.width));
   const x0=from.left+from.width/2-to.width/2, y0=from.top+from.height/2-to.height/2;
   const x1=to.left, y1=to.top, lift=Math.max(36,Math.hypot(x1-x0,y1-y0)*.22);
-  const spin=tilt||rand(-14,14), end=shrink?.94:1;
-  el.animate([
-    {transform:`translate(${x0}px,${y0}px) rotate(${-spin}deg) scale(${s0})`,opacity:0},
-    {transform:`translate(${x0}px,${y0-6}px) rotate(${-spin}deg) scale(${s0*1.05})`,opacity:1,offset:.08},
-    {transform:`translate(${(x0+x1)/2}px,${Math.min(y0,y1)-lift}px) rotate(${spin/2}deg) scale(${(s0+1)/2*1.12})`,offset:.52},
-    {transform:`translate(${x1}px,${y1}px) rotate(0deg) scale(${end})`,opacity:1,offset:.9},
-    {transform:`translate(${x1}px,${y1}px) rotate(0deg) scale(${end})`,opacity:shrink?0:1}
-  ],{duration,delay,easing:'cubic-bezier(.35,.6,.25,1)',fill:'both'}).finished.catch(()=>{}).finally(()=>{
-    el.remove();
-    if(hide)hide.style.visibility='';
-  });
+  const turn=spin??rand(-14,14), end=shrink?.94:1;
+  const done=el.animate([
+    {transform:`translate(${x0}px,${y0}px) rotate(${-turn}deg) scale(${s0})`,opacity:0},
+    {transform:`translate(${x0}px,${y0-6}px) rotate(${-turn}deg) scale(${s0*1.05})`,opacity:1,offset:.08},
+    {transform:`translate(${(x0+x1)/2}px,${Math.min(y0,y1)-lift}px) rotate(${turn/2}deg) scale(${(s0+1)/2*1.12})`,offset:.52},
+    {transform:`translate(${x1}px,${y1}px) rotate(${tilt}deg) scale(${end})`,opacity:1,offset:.9},
+    {transform:`translate(${x1}px,${y1}px) rotate(${tilt}deg) scale(${end})`,opacity:shrink?0:1}
+  ],{duration,delay,easing:'cubic-bezier(.35,.6,.25,1)',fill:'both'}).finished.catch(()=>{}).finally(()=>el.remove());
+  concealWhile(hide,conceal,done);
   if(flip) el.firstElementChild.animate([{transform:'rotateY(0deg)'},{transform:'rotateY(180deg)'}],
     {duration:duration*.5,delay:delay+duration*.28,easing:'cubic-bezier(.5,0,.3,1)',fill:'both'});
+}
+
+// ---- Hands at the table --------------------------------------------------
+// A gloved hand seen from above, fingers pointing up. The grip point, where a card is held,
+// is at 50% / 15% of the drawing.
+const GRIP=.15, HAND_RATIO=1.75;
+function handArt(color) {
+  const glove='fill="#f6eedd" stroke="#a89a7c" stroke-width="2.2" stroke-linejoin="round"';
+  return '<svg viewBox="0 0 120 210" aria-hidden="true" focusable="false">'+
+    '<path d="M33 210 38 126q22-9 44 0l5 84z" fill="#141b18" stroke="#000" stroke-opacity=".5" stroke-width="2"/>'+
+    '<rect x="15" y="60" width="15" height="48" rx="7.5" transform="rotate(-36 30 104)" '+glove+'/>'+
+    '<rect x="34" y="14" width="13.5" height="62" rx="6.75" transform="rotate(-7 41 72)" '+glove+'/>'+
+    '<rect x="49" y="6" width="13.5" height="68" rx="6.75" transform="rotate(-2 56 72)" '+glove+'/>'+
+    '<rect x="63.5" y="12" width="13.5" height="62" rx="6.75" transform="rotate(4 70 72)" '+glove+'/>'+
+    '<rect x="77" y="28" width="12.5" height="48" rx="6.25" transform="rotate(10 83 72)" '+glove+'/>'+
+    '<path d="M33 120q-7-34 3-58 24-10 50 2 7 28 1 56-27 9-54 0z" '+glove+'/>'+
+    '<path d="M47 82v22M60 80v25M73 82v22" fill="none" stroke="#cdbf9e" stroke-width="2.4" stroke-linecap="round"/>'+
+    '<rect x="30" y="114" width="60" height="20" rx="8" fill="'+color+'" stroke="#000" stroke-opacity=".45" stroke-width="2"/>'+
+    '<path d="M36 119h48" stroke="#fff" stroke-opacity=".45" stroke-width="2.5" stroke-linecap="round"/></svg>';
+}
+function makeHand(width,color) {
+  const hand=document.createElement('div');
+  hand.className='fx-hand';
+  hand.setAttribute('aria-hidden','true');
+  hand.style.width=width+'px';
+  hand.style.height=width*HAND_RATIO+'px';
+  hand.innerHTML=handArt(color);
+  document.body.append(hand);
+  return hand;
+}
+const center=r=>({x:r.left+r.width/2,y:r.top+r.height/2});
+// Transform that puts the grip point at (x,y) with the fingers pointing along `angle` degrees.
+const gripAt=(w,x,y,angle)=>`translate(${x-w/2}px,${y-w*HAND_RATIO*GRIP}px) rotate(${angle}deg)`;
+const cardAt=(r,x,y,angle,scale=1)=>`translate(${x-r.width/2}px,${y-r.height/2}px) rotate(${angle}deg) scale(${scale})`;
+function cardGhost(to,face,back,flip) {
+  const el=document.createElement('div');
+  el.className='fx-card';
+  el.setAttribute('aria-hidden','true');
+  el.style.width=to.width+'px';
+  el.style.height=to.height+'px';
+  el.innerHTML='<div class="fx-card-inner">'+(flip?'<div class="fx-face fx-back">'+back+'</div><div class="fx-face fx-front">'+face+'</div>':'<div class="fx-face">'+face+'</div>')+'</div>';
+  document.body.append(el);
+  return el;
+}
+
+// A hand reaches in from `origin`, tosses the card and pulls back while the card slides,
+// spinning, to rest on `to`. Resolves when the card has landed.
+export function throwCard({origin,to,face,back='',flip=false,tilt=0,hide=null,conceal='',color='#d9b366',delay=0,duration=780,startScale=.7}) {
+  if(!lively()||!to?.width||!origin)return Promise.resolve();
+  const target=center(to), dx=target.x-origin.x, dy=target.y-origin.y, distance=Math.hypot(dx,dy)||1;
+  const ux=dx/distance, uy=dy/distance, angle=Math.atan2(dy,dx)*180/Math.PI+90;
+  const reach=Math.min(distance*.5,Math.max(90,to.height*1.5));
+  const start={x:origin.x-ux*26,y:origin.y-uy*26}, release={x:origin.x+ux*reach,y:origin.y+uy*reach};
+  const width=Math.max(46,Math.min(112,to.width*1.08));
+  const hand=makeHand(width,color), card=cardGhost(to,face,back,flip);
+  // The shortest turn from the hand's angle to the resting tilt, plus one full spin.
+  const rest=tilt+Math.round((angle-tilt)/360)*360+(ux>=0?360:-360);
+  const options={duration,delay,fill:'both'};
+  hand.animate([
+    {transform:gripAt(width,start.x,start.y,angle),opacity:0,easing:'cubic-bezier(.3,0,.7,.5)'},
+    {transform:gripAt(width,start.x+ux*14,start.y+uy*14,angle),opacity:1,offset:.1,easing:'cubic-bezier(.45,0,.85,.55)'},
+    {transform:gripAt(width,release.x,release.y,angle),opacity:1,offset:.4,easing:'ease-out'},
+    {transform:gripAt(width,release.x+ux*12,release.y+uy*12,angle+(ux>=0?9:-9)),opacity:1,offset:.5,easing:'cubic-bezier(.4,0,.6,1)'},
+    {transform:gripAt(width,start.x,start.y,angle),opacity:1,offset:.9},
+    {transform:gripAt(width,start.x,start.y,angle),opacity:0}
+  ],options).finished.catch(()=>{}).finally(()=>hand.remove());
+  const landed=card.animate([
+    {transform:cardAt(to,start.x,start.y,angle,startScale),opacity:0,easing:'cubic-bezier(.3,0,.7,.5)'},
+    {transform:cardAt(to,start.x+ux*14,start.y+uy*14,angle,startScale),opacity:1,offset:.1,easing:'cubic-bezier(.45,0,.85,.55)'},
+    {transform:cardAt(to,release.x,release.y,angle,(startScale+1)/2),opacity:1,offset:.4,easing:'cubic-bezier(.12,.75,.25,1)'},
+    {transform:cardAt(to,target.x,target.y,rest,1.04),opacity:1,offset:.9,easing:'ease-out'},
+    {transform:cardAt(to,target.x,target.y,rest,1),opacity:1}
+  ],options).finished.catch(()=>{}).finally(()=>card.remove());
+  if(flip)card.firstElementChild.animate([{transform:'rotateY(0deg)'},{transform:'rotateY(180deg)'}],
+    {duration:duration*.3,delay:delay+duration*.4,easing:'cubic-bezier(.4,0,.3,1)',fill:'both'});
+  return concealWhile(hide,conceal,landed);
+}
+
+// Cards slide together, a hand comes for them and drags the stack to `to`.
+// items: [{html, from}]; `to` is the destination rectangle. Resolves when the stack arrives.
+export function grab({origin,items,to,color='#d9b366',delay=0,gather=260,keep=false}) {
+  items=items.filter(item=>item.from?.width);
+  if(!lively()||!items.length||!to?.width||!origin)return Promise.resolve();
+  const size=items[0].from, meet=center(items.length>1?items[1].from:size), goal=center(to);
+  const dx=meet.x-origin.x, dy=meet.y-origin.y, distance=Math.hypot(dx,dy)||1, ux=dx/distance, uy=dy/distance;
+  const angle=Math.atan2(dy,dx)*180/Math.PI+90, width=Math.max(46,Math.min(112,size.width*1.08));
+  const start={x:origin.x-ux*26,y:origin.y-uy*26};
+  const reachTime=gather+300, pullTime=460, total=reachTime+pullTime+220, end=to.width/size.width;
+  const hand=makeHand(width,color);
+  hand.animate([
+    {transform:gripAt(width,start.x,start.y,angle),opacity:0,offset:0},
+    {transform:gripAt(width,start.x,start.y,angle),opacity:0,offset:gather*.4/total,easing:'cubic-bezier(.3,.7,.3,1)'},
+    {transform:gripAt(width,meet.x,meet.y,angle),opacity:1,offset:(reachTime-70)/total},
+    {transform:gripAt(width,meet.x,meet.y,angle),opacity:1,offset:reachTime/total,easing:'cubic-bezier(.5,0,.4,1)'},
+    {transform:gripAt(width,goal.x,goal.y,angle),opacity:1,offset:(reachTime+pullTime)/total,easing:'ease-in'},
+    {transform:gripAt(width,start.x,start.y,angle),opacity:0,offset:1}
+  ],{duration:total,delay,fill:'both'}).finished.catch(()=>{}).finally(()=>hand.remove());
+  const arrivals=items.map((item,i)=>{
+    const el=cardGhost(size,item.html,'',false), from=center(item.from), lean=(i-(items.length-1)/2)*7;
+    // A card still in the air shows up only when it lands, where its thrown twin disappears.
+    if(item.late&&delay>0){el.style.visibility='hidden';setTimeout(()=>{el.style.visibility='';},delay);}
+    const stackX=meet.x+(i-(items.length-1)/2)*5, stackY=meet.y-i*2;
+    return el.animate([
+      {transform:cardAt(size,from.x,from.y,item.tilt??0),opacity:1,offset:0,easing:'cubic-bezier(.3,.7,.3,1)'},
+      {transform:cardAt(size,stackX,stackY,lean),opacity:1,offset:gather/total},
+      {transform:cardAt(size,stackX,stackY,lean),opacity:1,offset:reachTime/total,easing:'cubic-bezier(.5,0,.4,1)'},
+      {transform:cardAt(size,goal.x,goal.y,lean/2,end),opacity:1,offset:(reachTime+pullTime)/total},
+      {transform:cardAt(size,goal.x,goal.y,lean/2,end),opacity:keep?1:0,offset:1}
+    ],{duration:total,delay:delay+i*40,fill:'both'}).finished.catch(()=>{}).finally(()=>el.remove());
+  });
+  return Promise.all(arrivals);
+}
+
+// A chip tossed from one place to another: it arcs, spins and settles with a small bounce.
+export function chipFly({from,to,color='#c4323b',delay=0,duration=620,size=26}) {
+  if(!lively()||!from?.width||!to?.width)return Promise.resolve();
+  const a=center(from), b=center(to), lift=Math.min(84,Math.max(34,Math.hypot(b.x-a.x,b.y-a.y)*.2));
+  const el=document.createElement('i');
+  el.className='chip fx-chip';
+  el.setAttribute('aria-hidden','true');
+  el.style.setProperty('--chip',color);
+  el.style.setProperty('--chip-size',size+'px');
+  document.body.append(el);
+  const at=(x,y,turn,scale)=>`translate(${x-size/2}px,${y-size/2}px) rotate(${turn}deg) scale(${scale})`;
+  return el.animate([
+    {transform:at(a.x,a.y,0,.8),opacity:0,easing:'cubic-bezier(.3,.6,.6,1)'},
+    {transform:at(a.x,a.y-8,40,1),opacity:1,offset:.08,easing:'cubic-bezier(.3,.5,.6,1)'},
+    {transform:at((a.x+b.x)/2,Math.min(a.y,b.y)-lift,300,1.5),opacity:1,offset:.5,easing:'cubic-bezier(.4,0,.8,.6)'},
+    {transform:at(b.x,b.y,560,1),opacity:1,offset:.86,easing:'ease-out'},
+    {transform:at(b.x,b.y-7,600,1.06),opacity:1,offset:.93,easing:'ease-in'},
+    {transform:at(b.x,b.y,620,1),opacity:1}
+  ],{duration,delay,fill:'both'}).finished.catch(()=>{}).finally(()=>el.remove());
+}
+
+// Lets an element that changed place glide from its previous rectangle to the new one.
+export function glide(el,from,{delay=0,duration=420}={}) {
+  const to=el?.getBoundingClientRect?.();
+  if(!lively()||!from?.width||!to?.width)return;
+  const dx=from.left+from.width/2-(to.left+to.width/2), dy=from.top+from.height/2-(to.top+to.height/2);
+  if(Math.abs(dx)<1&&Math.abs(dy)<1)return;
+  el.animate([{translate:`${dx}px ${dy}px`},{translate:'0px 0px'}],{duration,delay,fill:'backwards',easing:'cubic-bezier(.3,.7,.25,1)'});
 }
 
 // ---- Announcements -----------------------------------------------------

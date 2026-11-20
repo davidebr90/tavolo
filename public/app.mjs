@@ -16,7 +16,7 @@ const app=document.querySelector('#app'), modal=document.querySelector('#modal')
 const codePattern=/^[a-f0-9]{24}$/;
 const codeParam=new URLSearchParams(location.search).get('stanza');
 let code=codePattern.test(codeParam)?codeParam:null, token=code?localStorage.getItem('tavolo:'+code):null;
-let state, tab='play', navalView='target', prefix=[], drawnVersion=-1, connected=false, pending=null, busy=false, draft=[], editingShip=null, anchor=null, vertical=false;
+let state, tab='play', navalView='target', prefix=[], connected=false, pending=null, busy=false, draft=[], editingShip=null, anchor=null, vertical=false;
 let toastTimer, stopLive, restoring=false, restoreError='', expired=false, transport='ws';
 const seenRooms=new Map(), monitors=new Map(), unavailable=new Set();
 const closingRooms=new Set();
@@ -103,8 +103,21 @@ function closeMessage(current,command) {
   if(typeof current.closed!=='boolean') throw Error('Il server usa una versione precedente. Riavvia node dev.mjs per abilitare la chiusura.');
   return {id:random(16),version:current.version,action:{close:command}};
 }
+// The newest state and when it arrived: boards animate the last move while it is fresh, and a
+// re-render in that window continues the animation instead of cutting or restarting it.
+let fresh={version:-1,at:0,prev:null};
+const FRESH=4800;
+const isFresh=()=>Boolean(state)&&state.version===fresh.version&&performance.now()-fresh.at<FRESH;
+const elapsedStyle=()=>isFresh()?'--fx-elapsed:-'+Math.round(performance.now()-fresh.at)+'ms':'';
+let held=null, underTop=null;
 function accept(next) {
   if(state && next.version<state.version) return;
+  // The live channel often delivers our own move before the HTTP answer. Keep it until the
+  // answer clears the pending move, so the board is drawn once and its animation is not cut.
+  if(busy&&state&&next.version>state.version) {
+    if(!held||next.version>=held.version)held=next;
+    return;
+  }
   if(state && next.version===state.version) {
     if((next.chatVersion??0)>(state.chatVersion??0)) {
       if((!chatOpen||document.hidden)&&unreadChat(next,state.chatVersion??0).length)toast('Nuovo messaggio in chat.');
@@ -120,10 +133,15 @@ function accept(next) {
   const cardOrigins=cardSnapshot(next.game.id);
   const boardOrigins=boardSnapshot(next.game.id);
   notifyClosure(state,next);
+  if(next.game.id==='uno'&&previousRoom?.game.id==='uno'&&previousRoom.game.top!==next.game.top)underTop=previousRoom.game.top;
+  if(previousRoom&&next.game.result!==null&&(next.rematch??[]).some(i=>i!==next.side&&!(previousRoom.rematch??[]).includes(i))&&!(next.rematch??[]).includes(next.side))
+    toast(next.players[(next.rematch??[]).find(i=>i!==next.side)]+' vuole la rivincita.');
+  if(previousRoom&&previousRoom.game.result!==null&&next.game.result===null)underTop=null;
   state=next;
   prefix=[];
   selectedCard=null;
   seenRooms.set(code,next);
+  fresh={version:next.version,at:performance.now(),prev:previousRoom?.game??null};
   render();
   if(incoming)showStrike(incoming);
   animateCards(previousRoom,next,cardOrigins);
@@ -137,7 +155,7 @@ function setConnected(value) {
 }
 async function live() {
   await settings;
-  if(!code||!token||state?.closed||state?.game.result!==null)return;
+  if(!code||!token||state?.closed)return;
   stopLive?.();
   stopLive=watchRoom({code,token},transport,next=>{
     if(!connected) {
@@ -145,7 +163,7 @@ async function live() {
       if(state?.version===next.version)render();
     }
     accept(next);
-    if(state?.closed||state?.game.result!=null)stopLive?.();
+    if(state?.closed)stopLive?.();
   },()=>api(),{interval:1200,onError:error=>{
     if(error.status===404) {
       stopLive?.();
@@ -497,7 +515,7 @@ function checker(g) {
   const flip=chess||id==='dama';
   const paths=flip?moves.map(m=>chess?[m.from,m.to]:m.path):[];
   const choices=new Set(paths.filter(path=>prefix.every((at,i)=>path[i]===at)).map(path=>path[prefix.length]));
-  const newest=state.version>drawnVersion;
+  const newest=isFresh();
   const mayReverse=flip&&state.side===1;
   const checkAt=chess&&g.check&&g.result===null?kingSquare(board,g.turn):-1;
   const origin=prefix.at(-1);
@@ -554,7 +572,7 @@ function navyGrid(ships,shots,target,placing) {
   const grid='<div class="navy-grid" style="--sea-size:'+size+'">'+Array.from({length:size*size},(_,i)=>{
     const shot=fired.get(i), ship=hull.get(i), down=sunk.has(i);
     const number=ship?'<small class="sector-number">'+ship.sector+'</small>':'';
-    const tile=cell(number+(shot?(shot.hit?'×':'·'):''),[ship?'hull ship-color-'+ship.index:'',placing&&ship&&ship.index===editingShip?'moving-origin':'',shot?.hit?'hit':shot?'miss':'',down?'sunk':'',state.version>drawnVersion&&game().last?.at===i&&game().last.side===(target?state.side:1-state.side)?'animate':''].join(' '),
+    const tile=cell(number+(shot?(shot.hit?'×':'·'):''),[ship?'hull ship-color-'+ship.index:'',placing&&ship&&ship.index===editingShip?'moving-origin':'',shot?.hit?'hit':shot?'miss':'',down?'sunk':'',isFresh()&&game().last?.at===i&&game().last.side===(target?state.side:1-state.side)?'animate':''].join(' '),
       'data-naval="'+i+'"',coord(i,size)+(shot?(shot.hit?' colpito':' acqua'):ship?' nave '+(ship.index+1)+' settore '+ship.sector+(ship.sector===1?' prua':ship.sector===ship.length?' poppa':''):''),placing||(target&&acting()&&!shot));
     if(!placing||!ship||ship.length===1)return tile;
     return '<div class="ship-sector">'+tile+'<span class="turn-ship">'+[-1,1].map(dir=>'<button data-pivot="'+i+'" data-spin="'+dir+'" aria-label="Ruota '+(dir===1?'in senso orario':'in senso antiorario')+'">'+(dir===1?'↻':'↺')+'</button>').join('')+'</span></div>';
@@ -584,8 +602,13 @@ function playEffects(list,prev,next,before) {
   const q=selector=>app.querySelector(selector);
   const at=i=>q('[data-cell="'+i+'"]')??q('[data-go="'+i+'"]')??q('[data-bg="'+i+'"]');
   const rect=el=>el?.getBoundingClientRect?.();
-  const board=q('.board,.bg-board,.dots-board,.nim-board,.card-table,.navy-battle');
+  const board=q('.board,.bg-board,.dots-board,.nim-board,.table-ring,.navy-battle');
   const later=(ms,run)=>setTimeout(run,ms);
+  // Chips come from the bank; on small screens, where it is hidden, from beside the deck.
+  const chipSource=()=>{
+    const bank=rect(q('[data-bank]'));
+    return bank?.width?bank:rect(q('[data-stock]'));
+  };
   let landing=quick?0:360, captures=0;
   for(const e of list) switch(e.type) {
     case 'slide': {
@@ -680,22 +703,38 @@ function playEffects(list,prev,next,before) {
       break;
     }
     case 'battle': fx.announce('Battaglia!',{tone:'teal',sub:'Le flotte sono schierate'});break;
-    case 'sweep': later(700,()=>{
-      fx.announce('Scopa!',{tone:e.mine?'gold':'red',sub:e.mine?'':'per gli avversari'});
-      if(e.mine)fx.burstAt(q('.card-center'),{kind:'confetti',count:60,colors:fx.palettes.festa,speed:[4,11],angle:[-Math.PI*.9,-Math.PI*.1],gravity:.2,life:[1200,2000],size:[3,6]});
-    });break;
-    case 'round': later(900,()=>fx.announce('Smazzata '+e.round,{tone:'teal',sub:'Punti '+e.scores[next.side%2]+' – '+e.scores[1-next.side%2],hold:1300}));break;
-    case 'wild': later(own?520:700,()=>{const top=q('.card-center .playing-card');fx.ring(top,{color:({R:'#ff6b5a',G:'#3fd087',B:'#4d95f0',Y:'#ffd84d'})[e.color],scale:2.6,duration:900,width:4});fx.burstAt(top,{kind:'star',count:30,colors:fx.palettes[e.color]??fx.palettes.festa,speed:[2,7],life:[600,1100]});});break;
-    case 'penalty': later(700,()=>fx.announce('+'+e.amount,{tone:'red',hold:700}));break;
-    case 'reverse': later(own?520:700,()=>q('.card-center .playing-card')?.animate([{transform:'none'},{transform:'rotate(-360deg) scale(1.15)',offset:.7},{transform:'none'}],{duration:700,easing:'cubic-bezier(.3,.7,.3,1)'}));break;
-    case 'skip': later(own?520:700,()=>fx.ring(q('.card-center .playing-card'),{color:'#ff6a4d',scale:2,duration:600,width:4}));break;
-    case 'uno': later(800,()=>fx.announce('UNO!',{tone:'red',sub:e.mine?'Ultima carta':next.players[e.seat]+' ha una carta',hold:1000}));break;
+    case 'sweep': {
+      // A gold chip leaves the bank for the team that cleared the table.
+      const target=q('[data-score="'+e.team+'"] .sweep .chip:last-child')??q('[data-score="'+e.team+'"]');
+      fx.chipFly({from:chipSource(),to:rect(target),color:'#d99a16',delay:cardTiming.cleared,duration:CHIP});
+      later(cardTiming.cleared+200,()=>{
+        fx.announce('Scopa!',{tone:e.mine?'gold':'red',sub:e.mine?'':'per gli avversari'});
+        if(e.mine)fx.burstAt(q('.card-center'),{kind:'confetti',count:60,colors:fx.palettes.festa,speed:[4,11],angle:[-Math.PI*.9,-Math.PI*.1],gravity:.2,life:[1200,2000],size:[3,6]});
+      });
+      break;
+    }
+    case 'points': {
+      // One chip per point of the smazzata, paid by the bank to each team.
+      const source=chipSource();
+      e.points.forEach((points,team)=>{
+        const stack=q('[data-score="'+team+'"] .score')??q('[data-score="'+team+'"]');
+        const color=getComputedStyle(q('[data-score="'+team+'"]')??document.body).getPropertyValue('--seat-color').trim()||'#c4323b';
+        for(let i=0;i<points;i++)fx.chipFly({from:source,to:rect(stack),color,delay:THROW+GRAB+280+i*150,duration:CHIP});
+      });
+      break;
+    }
+    case 'round': later(THROW+GRAB+CHIP+Math.max(...e.points??[0],0)*150+700,()=>fx.announce('Smazzata '+e.round,{tone:'teal',sub:'Punti '+e.scores[next.side%2]+' – '+e.scores[1-next.side%2],hold:1300}));break;
+    case 'wild': later(cardTiming.landed||520,()=>{const top=q('.card-center .playing-card:not(.under)');fx.ring(top,{color:({R:'#ff6b5a',G:'#3fd087',B:'#4d95f0',Y:'#ffd84d'})[e.color],scale:2.6,duration:900,width:4});fx.burstAt(top,{kind:'star',count:30,colors:fx.palettes[e.color]??fx.palettes.festa,speed:[2,7],life:[600,1100]});});break;
+    case 'penalty': later((cardTiming.landed||520)+120,()=>fx.announce('+'+e.amount,{tone:'red',hold:700}));break;
+    case 'reverse': later(cardTiming.landed||520,()=>q('.card-center .playing-card:not(.under)')?.animate([{transform:'none'},{transform:'rotate(-360deg) scale(1.15)',offset:.7},{transform:'none'}],{duration:700,easing:'cubic-bezier(.3,.7,.3,1)'}));break;
+    case 'skip': later(cardTiming.landed||520,()=>fx.ring(q('.card-center .playing-card:not(.under)'),{color:'#ff6a4d',scale:2,duration:600,width:4}));break;
+    case 'uno': later((cardTiming.landed||520)+260,()=>fx.announce('UNO!',{tone:'red',sub:e.mine?'Ultima carta':next.players[e.seat]+' ha una carta',hold:1000}));break;
     case 'pass': fx.flash(q('.banner'),'fx-sweep',1200);break;
-    case 'start': fx.announce('Si gioca!',{tone:'gold',sub:next.game.id==='scopa'&&next.maxPlayers===4?'Scopone scientifico':catalog[id].name});break;
+    case 'start': fx.announce(e.rematch?'Rivincita!':'Si gioca!',{tone:'gold',sub:e.rematch?'Partita '+(next.games??2)+' · i posti ruotano':next.game.id==='scopa'&&next.maxPlayers===4?'Scopone scientifico':catalog[id].name});break;
     case 'join': {
-      const chip=q('.player[data-seat="'+e.seat+'"]')??q('[data-other="'+e.seat+'"]');
+      const chip=q('.player[data-seat="'+e.seat+'"]')??q('.seat[data-other="'+e.seat+'"]');
       fx.flash(chip,'fx-join',900);
-      fx.sparkle(chip?.querySelector('.avatar,.mini-hand'));
+      fx.sparkle(chip?.querySelector('.avatar'));
       break;
     }
     case 'result': later(landing+300,()=>{
@@ -703,7 +742,7 @@ function playEffects(list,prev,next,before) {
       else if(e.outcome==='draw')fx.announce('Pareggio',{tone:'teal',hold:1600});
       else fx.announce('Sconfitta',{tone:'ash',sub:(id==='scopa'&&next.maxPlayers===4?'Squadra '+(g.result+1):next.players[g.result]??'Avversario')+' vince',hold:1800});
     });break;
-    case 'your-turn': later(landing,()=>{fx.flash(q('.banner'),'fx-sweep',1200);fx.ring(q('.player.current .avatar')??q('.hand-seat[aria-current=true] .mini-hand'),{scale:2,duration:700});});break;
+    case 'your-turn': later(Math.max(landing,cardTiming.cleared),()=>{fx.flash(q('.banner'),'fx-sweep',1200);fx.ring(q('.player.current .avatar')??q('.seat[aria-current=true] .avatar'),{scale:2,duration:700});});break;
   }
 }
 function activeShip() {
@@ -751,12 +790,12 @@ function cardFace(id,value) {
   const suit=Math.floor(value/10), rank=value%10+1;
   return {face:(['','A','2','3','4','5','6','7','F','C','R'][rank])+' '+['◉','♜','∥','♠'][suit],label:({1:'Asso (1)',8:'Fante (8)',9:'Cavallo (9)',10:'Re (10)'}[rank]??rank)+' di '+['denari','coppe','bastoni','spade'][suit],style:'scopa-'+suit};
 }
-function playingCard(id,value,attribute='',enabled=false,selected=false) {
+function playingCard(id,value,attribute='',enabled=false,selected=false,inline='',extra='') {
   const {label,style}=cardFace(id,value);
   const artwork=deckCache.get(id==='uno'?'uno':scopaDeck)?.[cardKey(id,value)];
   const body=artwork?(typeof artwork==='string'?'<img alt="" draggable="false" src="data:image/webp;base64,'+artwork+'">':cardSvg(artwork)):'';
-  const cls='playing-card '+style;
-  if(!attribute)return '<span class="'+cls+'" role="img" aria-label="'+label+'" data-card="'+escape(value)+'">'+body+'</span>';
+  const cls='playing-card '+style+(extra?' '+extra:'');
+  if(!attribute)return '<span class="'+cls+'" role="img" aria-label="'+label+'" data-card="'+escape(value)+'"'+(inline?' style="'+inline+'"':'')+'>'+body+'</span>';
   return '<button class="'+cls+'" '+attribute+' aria-label="'+label+'" '+(id==='scopa'?'aria-pressed="'+selected+'"':'')+' '+(enabled?'':'disabled')+'>'+body+'</button>';
 }
 const loadingDecks=new Set();
@@ -776,23 +815,72 @@ app.addEventListener('change',event=>{
   localStorage.setItem('tavolo:scopa-deck',value);
   render();
 });
-function opponentHand(g) {
-  const capacity=state.maxPlayers??2;
-  const seats=Array.from({length:capacity},(_,seat)=>{
-    const occupied=seat<state.players.length;
-    const own=seat===state.side;
-    const count=g.handCounts?.[seat]??(own?g.hand.length:g.opponentCount);
-    const current=seatHasTurn(state,seat);
-    const title=occupied?displayNickname(state.players[seat],state.playerMarkup?.[seat]):'Posto '+(seat+1);
-    const details=occupied?(count===1?'1 carta':count+' carte')+(count===1&&g.id==='uno'?' <b class="uno-call">UNO!</b>':''):'Libero';
-    const team=capacity===4&&g.id==='scopa'?' · Squadra '+(seat%2+1):'';
-    const backs='<span class="mini-hand" aria-hidden="true">'+('<i class="pile-back '+g.id+'"></i>').repeat(occupied?Math.min(3,count):3)+'</span>';
-    return '<li class="hand-seat'+(occupied?'':' seat-vacant')+'" data-other="'+seat+'"'+(current?' aria-current="true"':'')+'>'+backs+
-      '<span class="hand-seat-info"><strong>'+title+(own?' (tu)':'')+'</strong><small>'+details+team+'</small>'+
-      (current?'<b class="seat-turn">Di turno</b>':'')+'</span></li>';
-  }).join('');
-  return '<ul class="other-hands seat-gallery" aria-label="Giocatori al tavolo">'+seats+'</ul>';
+// Seats around the card table: you sit at the bottom, the others follow clockwise from your left.
+function seatSpot(k,total) {
+  if(k===0)return {x:0,y:1};
+  const others=total-1, span=others<=3?180:224, angle=(270-span/2+span*k/(others+1))*Math.PI/180;
+  const curve=v=>Math.sign(v)*Math.sqrt(Math.abs(v));
+  return {x:curve(Math.cos(angle)),y:curve(Math.sin(angle))};
 }
+function tableSeats(g) {
+  const total=state.maxPlayers??2;
+  const seats=Array.from({length:total},(_,seat)=>{
+    const {x,y}=seatSpot((seat-state.side+total)%total,total);
+    const occupied=seat<state.players.length, own=seat===state.side;
+    const count=g.handCounts?.[seat]??(own?g.hand.length:g.opponentCount);
+    const team=total===4&&g.id==='scopa'?'Squadra '+(seat%2+1):'';
+    const details=!occupied?'In attesa':own?(team||(count===1?'1 carta':count+' carte')):[count===1?'1 carta':count+' carte',team].filter(Boolean).join(' · ');
+    const shown=own||!occupied?0:Math.min(count,7);
+    const fan=shown?'<span class="seat-cards" aria-hidden="true">'+Array.from({length:shown},(_,i)=>'<i class="pile-back '+g.id+'" style="--o:'+(i-(shown-1)/2).toFixed(1)+'"></i>').join('')+'</span>':'';
+    const name=occupied?displayNickname(state.players[seat],state.playerMarkup?.[seat]):'Posto libero';
+    return '<li class="seat'+(own?' me':'')+(occupied?'':' vacant')+'" data-other="'+seat+'" style="--x:'+x.toFixed(3)+';--y:'+y.toFixed(3)+'"'+(seatHasTurn(state,seat)?' aria-current="true"':'')+'>'+
+      '<span class="seat-plate"><span class="avatar seat-'+seat+'" aria-hidden="true">'+(occupied?initial(state.players[seat],state.playerMarkup?.[seat]):'+')+'</span>'+
+      '<span class="seat-info"><strong>'+name+(own?' (tu)':'')+'</strong><small>'+details+'</small></span>'+
+      (occupied?'<b class="seat-count" aria-hidden="true">'+count+'</b>':'')+
+      (g.id==='uno'&&occupied&&count===1?'<b class="uno-call">UNO!</b>':'')+'</span>'+fan+'</li>';
+  }).join('');
+  const turn=state.players.length===total&&g.result===null&&!state.closed?seatSpot((g.turn-state.side+total)%total,total):null;
+  // The turn marker rests on the felt in front of whoever must play.
+  const marker=turn?'<i class="turn-chip" aria-hidden="true" style="--cx:'+(turn.x*36+(Math.abs(turn.x)<.3?13:0)).toFixed(1)+';--cy:'+(turn.y*33).toFixed(1)+'"></i>':'';
+  return '<ul class="table-seats'+(total>5?' compact':'')+'" aria-label="Giocatori al tavolo">'+seats+'</ul>'+marker;
+}
+// Chips in columns of five. The last `incoming` chips are still on their way from the bank.
+function chipRack(count,kind,incoming=0,land=0) {
+  let index=0;
+  const columns=[];
+  for(let left=count;left>0;left-=5)columns.push(Math.min(5,left));
+  return '<span class="chip-rack '+kind+'" aria-hidden="true"'+(incoming?' style="--land:'+land+'ms"':'')+'>'+(columns.map(size=>'<span class="chip-stack" style="--n:'+size+'">'+
+    Array.from({length:size},(_,i)=>{
+      const late=index>=count-incoming, k=index-(count-incoming);
+      index++;
+      return '<i class="chip'+(late?' incoming':'')+'" style="--i:'+i+(late?';--k:'+k:'')+'"></i>';
+    }).join('')+'</span>').join('')||'<span class="chip-stack empty" style="--n:1"></span>')+'</span>';
+}
+const THROW=780, GRAB=1040, CHIP=620;
+const tiltOf=card=>{
+  let hash=7;
+  for(const ch of String(card))hash=(hash*31+ch.charCodeAt(0))%997;
+  return ((hash%9-4)*1.2).toFixed(1);
+};
+// A team's side of the felt: the cards it took and the chips for its points.
+function teamZone(g,team,mine) {
+  const label=!mine?'Prese avversarie':state.maxPlayers===4?'Prese della squadra':'Le tue prese';
+  const cards=g.captured?.[team]??[], sweeps=g.sweepCards?.[team]??[];
+  const markers=sweeps.slice(-3).map((card,i)=>'<i style="--i:'+i+'">'+playingCard('scopa',card)+'</i>').join('');
+  const gallery=cards.map(card=>'<span class="taken-face">'+scopaFace(card)+(sweeps.includes(card)?'<b>Scopa</b>':'')+'</span>').join('');
+  const before=isFresh()&&fresh.prev?.id==='scopa'?fresh.prev:null;
+  const roundEnded=before&&(before.round!==g.round||(before.result===null&&g.result!==null));
+  const gained=roundEnded?Math.min(g.scores[team],g.points?.[team]??0):0;
+  const swept=before&&!roundEnded&&g.sweeps[team]>(before.sweeps?.[team]??0)?1:0;
+  return '<div class="team-zone '+(mine?'mine':'theirs')+' seat-'+team+'">'+
+    '<div class="capture-stack" data-pile="'+team+'"><button class="table-pile pile-inspect" type="button" aria-label="'+label+', '+cards.length+' carte. Mostra le prese">'+
+    '<span class="capture-art"><i class="pile-back scopa" '+(cards.length?'':'hidden')+'></i>'+markers+'</span><span>'+label+' <b>'+g.captureCounts[team]+'</b><small>Punti sicuri · '+(g.securedPoints?.[team]??g.sweeps[team])+'</small></span></button>'+
+    '<section class="capture-preview" tabindex="0" aria-label="'+label+'"><strong>'+label+' · Scope '+g.sweeps[team]+'</strong><div>'+(gallery||'Nessuna presa')+'</div></section></div>'+
+    '<div class="score-chips" data-score="'+team+'" role="img" aria-label="'+(mine?'I tuoi punti':'Punti avversari')+': '+g.scores[team]+(g.sweeps[team]?', scope in questa smazzata: '+g.sweeps[team]:'')+'">'+
+    chipRack(g.scores[team],'score',gained,THROW+GRAB+280+CHIP)+(g.sweeps[team]?chipRack(g.sweeps[team],'sweep',swept,THROW+GRAB+CHIP):'')+
+    '<span class="score-label"><b>'+g.scores[team]+'</b> '+(g.scores[team]===1?'punto':'punti')+'</span></div></div>';
+}
+const bankTray=()=>'<div class="bank" data-bank aria-hidden="true"><span class="seat-0">'+chipRack(4,'score')+'</span><span>'+chipRack(5,'sweep')+'</span><span class="seat-1">'+chipRack(4,'score')+'</span><small>Banco</small></div>';
 function playHand(value) {
   if(!acting()||pending)return;
     if(game().id==='scopa') {
@@ -805,80 +893,123 @@ function playHand(value) {
       showModal('<h2>Scegli il <em>colore</em></h2><div class="promotion">'+Object.entries(unoColors).filter(([color])=>color!=='W').map(([color,name])=>'<button class="uno-active uno-'+color+'" data-uno-color="'+color+'">'+name+'</button>').join('')+'</div>');
     } else send({card:value});
   }
-function scopaFace(card) {
-  const face=playingCard('scopa',card);
+function scopaFace(card,inline='') {
+  const face=playingCard('scopa',card,'',false,false,inline);
   return cardHints?cardCaption(face,cardFace('scopa',card).label):face;
 }
-function cardPiles(g) {
-  const pile=(label,count,attr)=>'<div class="table-pile" '+attr+'><i class="pile-back '+g.id+'" '+(count?'':'hidden')+'></i><span>'+label+' <b>'+count+'</b></span></div>';
-  const stock=pile('Da pescare',g.remaining,'data-stock');
-  const piles=g.id==='scopa'&&g.captureCounts?[state.side%2,1-state.side%2].map(team=>{
-    const label=team!==state.side%2?'Prese avversarie':state.maxPlayers===4?'Prese della squadra':'Le tue prese';
-    const cards=g.captured?.[team]??[], sweeps=g.sweepCards?.[team]??[];
-    const markers=sweeps.slice(-3).map((card,i)=>'<i style="--i:'+i+'">'+playingCard('scopa',card)+'</i>').join('');
-    const gallery=cards.map(card=>'<span class="taken-face">'+scopaFace(card)+(sweeps.includes(card)?'<b>Scopa</b>':'')+'</span>').join('');
-    return '<div class="capture-stack" data-pile="'+team+'"><button class="table-pile pile-inspect" type="button" aria-label="'+label+', '+cards.length+' carte. Mostra le prese">'+
-      '<span class="capture-art"><i class="pile-back scopa" '+(cards.length?'':'hidden')+'></i>'+markers+'</span><span>'+label+' <b>'+g.captureCounts[team]+'</b><small>Punti sicuri · '+(g.securedPoints?.[team]??g.sweeps[team])+'</small></span></button>'+
-      '<section class="capture-preview" tabindex="0" aria-label="'+label+'"><strong>'+label+' · Scope '+g.sweeps[team]+'</strong><div>'+ (gallery||'Nessuna presa')+'</div></section></div>';
-  }).join(''):'';
-  return '<div class="table-piles">'+stock+piles+'</div>';
+// Rectangle an element would have without its tilt, so flights start and end on the card itself.
+function restRect(el) {
+  if(!el)return null;
+  const r=el.getBoundingClientRect(), width=el.offsetWidth||r.width, height=el.offsetHeight||r.height;
+  return {left:r.left+r.width/2-width/2,top:r.top+r.height/2-height/2,width,height};
 }
 function cardSnapshot(id) {
   if(!['scopa','uno'].includes(id)||!fx.lively()||document.hidden)return null;
-  const map=selector=>new Map(Array.from(app.querySelectorAll(selector),el=>[el.dataset.card??el.dataset.hand,el.getBoundingClientRect()]));
-  return {faces:map('.card-center [data-card]'),hand:map('.hand [data-hand]'),own:app.querySelector('.hand')?.getBoundingClientRect()};
+  const map=selector=>new Map(Array.from(app.querySelectorAll(selector),el=>[el.dataset.card??el.dataset.hand,restRect(el)]));
+  return {faces:map('.card-center [data-card]'),hand:map('.hand [data-hand]'),turn:app.querySelector('.turn-chip')?.getBoundingClientRect()??null};
 }
+// When the thrown card has landed and when a capture has left the table, for the effects that follow.
+const cardTiming={landed:0,cleared:0};
 function animateCards(prev,next,origins) {
-  const g=next.game;
-  if(!origins||next.players.length!==(next.maxPlayers??2)||!app.querySelector('[data-stock]'))return;
-  const old=prev?.game, opening=(!prev&&!g.last)||!!prev&&prev.players.length<(next.maxPlayers??2);
+  cardTiming.landed=cardTiming.cleared=0;
+  const g=next.game, total=next.maxPlayers??2, scopa=g.id==='scopa';
+  if(!origins||next.players.length!==total||!app.querySelector('[data-stock]')||!deckCache.has(scopa?scopaDeck:'uno'))return;
+  const old=prev?.game;
+  const opening=(!prev&&!g.last)||(!!prev&&prev.players.length<total)||(!!old&&old.result!==null&&g.result===null);
   if(!opening&&(!prev||next.version!==prev.version+1))return;
-  const box=el=>el?.getBoundingClientRect();
-  const sample=box(app.querySelector('.hand .playing-card'))??box(app.querySelector('.card-center .playing-card'));
-  const sized=(r,scale=1)=>r?.width&&sample?{left:r.left+r.width/2-sample.width*scale/2,top:r.top+r.height/2-sample.height*scale/2,width:sample.width*scale,height:sample.height*scale}:r;
-  const seat=side=>side===next.side?box(app.querySelector('.hand')):box(app.querySelector('[data-other="'+side+'"] .mini-hand'));
-  const stockCard=box(app.querySelector('[data-stock] .pile-back'));
-  const stock=stockCard?.width?stockCard:box(app.querySelector('[data-stock]'));
+  const q=selector=>app.querySelector(selector), box=el=>el?.getBoundingClientRect();
+  const seatEl=side=>q('.seat[data-other="'+side+'"]');
+  const seatPoint=side=>{
+    const r=box(seatEl(side)?.querySelector('.avatar'));
+    return r?{x:r.left+r.width/2,y:r.top+r.height/2}:null;
+  };
+  const seatColor=side=>{
+    const avatar=seatEl(side)?.querySelector('.avatar');
+    return (avatar&&getComputedStyle(avatar).getPropertyValue('--seat-color').trim())||'#d9b366';
+  };
   const back='<i class="pile-back '+g.id+'"></i>';
-  const center=sized(box(app.querySelector('.card-center .card-line')));
+  const stock=box(q('[data-stock] .pile-back'))??box(q('[data-stock]'));
+  const cardSelector=card=>'.card-center [data-card="'+CSS.escape(String(card))+'"]';
   const last=g.last;
   const changed=!opening&&last&&JSON.stringify(last)!==JSON.stringify(old?.last);
-  const played=changed&&(g.id==='scopa'||last.type==='play');
+  const played=changed&&(scopa||last.type==='play');
   const mine=played&&last.side===next.side;
+  const takes=scopa&&played&&last.take?.length>0;
   let wait=0;
-  if(played&&!(mine&&draggedMove)) {
-    const landing=app.querySelector('.card-center [data-card="'+CSS.escape(String(last.card))+'"]');
-    const from=mine?(origins.hand.get(String(last.card))??origins.own):sized(seat(last.side),.5);
-    fx.flight({face:playingCard(g.id,last.card),back,from,to:box(landing)??center,flip:!mine,hide:landing,duration:mine?520:700});
-    wait=mine?420:620;
+  if(played) {
+    const face=playingCard(g.id,last.card);
+    const held=mine?origins.hand.get(String(last.card)):null;
+    const origin=held?{x:held.left+held.width/2,y:held.top+held.height*.7}:seatPoint(last.side);
+    if(takes) {
+      // The card lands beside what it takes, then its player's hand rakes the lot to the pile.
+      const first=origins.faces.get(String(last.take[0]));
+      const landing=first?{left:first.left+first.width*.34,top:first.top+first.height*.12,width:first.width,height:first.height}:null;
+      if(landing&&origin) {
+        if(!(mine&&draggedMove)){fx.throwCard({origin,to:landing,face,back,flip:!mine,tilt:8,color:seatColor(last.side),duration:THROW});wait=THROW;}
+        const pile=q('[data-pile="'+(last.side%2)+'"] .capture-art');
+        fx.grab({origin:seatPoint(last.side)??origin,color:seatColor(last.side),delay:wait,to:box(pile),
+          items:[{html:face,from:landing,tilt:8,late:wait>0},...last.take.map(card=>({html:playingCard('scopa',card),from:origins.faces.get(String(card)),tilt:Number(tiltOf(card))}))]});
+        cardTiming.landed=wait;
+        wait+=GRAB;
+        setTimeout(()=>fx.sparkle(pile,fx.palettes.oro,8),wait);
+      }
+    } else if(!(mine&&draggedMove)) {
+      const landing=q(cardSelector(last.card)+':not(.under)');
+      if(landing&&origin) {
+        fx.throwCard({origin,to:restRect(landing),face,back,flip:!mine,tilt:Number(tiltOf(last.card)),hide:landing,conceal:cardSelector(last.card)+':not(.under)',color:seatColor(last.side),duration:THROW});
+        wait=THROW;
+      }
+      cardTiming.landed=wait;
+    }
   }
-  if(g.id==='scopa'&&played&&last.take?.length) {
-    const pile=app.querySelector('[data-pile="'+(last.side%2)+'"] .capture-art');
-    const dest=sized(box(pile),.42);
-    [last.card,...last.take].forEach((card,i)=>fx.flight({face:playingCard('scopa',card),from:origins.faces.get(String(card))??center,to:dest,delay:wait+i*90,duration:560,shrink:true}));
-    wait+=420+last.take.length*90;
-    setTimeout(()=>fx.sparkle(pile,fx.palettes.oro,8),wait);
+  cardTiming.cleared=wait;
+  // Cards that stay on the table wait for a capture to leave, then glide to their new places.
+  for(const el of app.querySelectorAll('.card-center [data-card]')) {
+    const from=origins.faces.get(el.dataset.card);
+    if(from)fx.glide(el,from,{delay:takes?wait:120});
   }
+  const marker=q('.turn-chip');
+  if(marker&&origins.turn)fx.glide(marker,origins.turn,{delay:wait,duration:640});
   const counts=game=>game.handCounts??(next.side===0?[game.hand.length,game.opponentCount]:[game.opponentCount,game.hand.length]);
   const now=counts(g), before=opening?now.map(()=>0):counts(old);
   const previousHand=new Set((old?.hand??[]).map(String));
-  const newRound=g.id==='scopa'&&old&&old.round!==g.round;
+  const newRound=scopa&&!!old&&old.round!==g.round;
   let order=0;
+  // The dealer lays new cards on the table before serving the players.
+  if(scopa&&(opening||newRound)) for(const el of app.querySelectorAll('.card-center [data-card]')) {
+    const card=el.dataset.card;
+    fx.flight({face:playingCard('scopa',Number(card)),back,from:stock,to:restRect(el),flip:true,hide:el,conceal:cardSelector(card),tilt:Number(tiltOf(card)),delay:wait+(order++)*120,duration:600});
+  }
   now.forEach((n,side)=>{
-    const dealt=newRound?n:n-before[side]+Number(played&&last.side===side);
+    const dealt=opening||newRound?n:n-before[side]+Number(played&&last.side===side);
     if(dealt<=0)return;
     if(side===next.side) {
-      const fresh=Array.from(app.querySelectorAll('.hand [data-hand]')).filter(el=>opening||newRound||!previousHand.has(el.dataset.hand)).slice(-dealt);
-      for(const el of fresh) {
+      const freshCards=Array.from(app.querySelectorAll('.hand [data-hand]')).filter(el=>opening||newRound||!previousHand.has(el.dataset.hand)).slice(-dealt);
+      for(const el of freshCards) {
         const value=g.hand.find(c=>String(c)===el.dataset.hand);
-        fx.flight({face:playingCard(g.id,value),back,from:stock,to:box(el),flip:true,hide:el,delay:wait+(order++)*110,duration:620});
+        fx.flight({face:playingCard(g.id,value),back,from:stock,to:restRect(el),flip:true,hide:el,conceal:'.hand [data-hand="'+CSS.escape(el.dataset.hand)+'"]',delay:wait+(order++)*110,duration:620});
       }
-    } else for(let i=0;i<Math.min(dealt,5);i++) fx.flight({face:back,from:stock,to:sized(seat(side),.4),delay:wait+(order++)*90,duration:520,shrink:true});
+      return;
+    }
+    const fan=box(seatEl(side)?.querySelector('.seat-cards'))??box(seatEl(side));
+    const target=fan&&stock?{left:fan.left+fan.width/2-stock.width/2,top:fan.top+fan.height/2-stock.height/2,width:stock.width,height:stock.height}:null;
+    if(!target)return;
+    if(!scopa&&!opening&&seatPoint(side)) {
+      // In UNO a player who draws reaches for the deck.
+      fx.grab({origin:seatPoint(side),color:seatColor(side),delay:wait+order*90,to:target,gather:120,items:Array.from({length:Math.min(dealt,4)},()=>({html:back,from:stock}))});
+      order+=3;
+    } else for(let i=0;i<Math.min(dealt,6);i++)fx.flight({face:back,from:stock,to:target,delay:wait+(order++)*95,duration:520,shrink:true,spin:200});
   });
 }
 
 function cardCaption(face,label,style='') {
   return '<span class="caption-card"'+(style?' style="'+style+'"':'')+'>'+face+'<small>'+label+'</small></span>';
+}
+// Deck choice and reading aids, shown beside the turn banner.
+function cardTools(g) {
+  const deck=g.id==='scopa'?'<label class="card-deck-picker">Mazzo <select id="scopa-deck">'+
+    Object.entries(scopaDecks).map(([id,name])=>'<option value="'+id+'" '+(id===scopaDeck?'selected':'')+'>'+name+'</option>').join('')+'</select></label>':'';
+  return '<span class="table-tools">'+deck+'<button class="outline card-help" data-action="card-hints" title="Mostra il nome sotto ogni carta" aria-label="Nomi delle carte" aria-pressed="'+cardHints+'">Aa</button></span>';
 }
 function cardTable(g) {
   const scopa=g.id==='scopa', deckId=scopa?scopaDeck:'uno';
@@ -886,27 +1017,44 @@ function cardTable(g) {
   if(!ready)ensureDeck(deckId);
   const active=ready&&acting();
   const options=scopa?g.takes[selectedCard]??[]:[];
-  const table=scopa?'<div class="card-line">'+g.table.map(c=>scopaFace(c)).join('')+'</div>':
-    '<div class="card-line">'+(cardHints?cardCaption(playingCard(g.id,g.top),unoColors[g.color]):playingCard(g.id,g.top)+(g.top.startsWith('W:')?'<i class="wild-color uno-active uno-'+g.color+'" aria-label="'+unoColors[g.color]+'"></i>':''))+'</div>';
-  const mine=state.side%2, theirs=1-mine;
-  const info=scopa?'Smazzata '+g.round+' · Punti '+g.scores[mine]+'–'+g.scores[theirs]+(g.points?' · ultima smazzata +'+g.points[mine]+' / +'+g.points[theirs]:''):
-    (state.maxPlayers>2?(g.direction===-1?'↺ Giro antiorario':'↻ Giro orario'):'');
-  const deck=scopa?'<label class="card-deck-picker">Mazzo <select id="scopa-deck">'+
-    Object.entries(scopaDecks).map(([id,name])=>'<option value="'+id+'" '+(id===scopaDeck?'selected':'')+'>'+name+'</option>').join('')+'</select></label>':'';
+  const total=state.maxPlayers??2, mine=state.side%2;
+  const stockBody='<i class="pile-back '+g.id+'" '+(g.remaining?'':'hidden')+'></i><span>Mazzo <b>'+g.remaining+'</b></span>';
+  const canDraw=!scopa&&active&&!g.drawn;
+  const stock=canDraw?'<button type="button" class="table-pile stock can-draw" data-stock data-action="uno-draw" aria-label="Pesca una carta dal mazzo, ne restano '+g.remaining+'">'+stockBody+'</button>':
+    '<div class="table-pile stock" data-stock>'+stockBody+'</div>';
+  let left, label, cards, right;
+  if(scopa) {
+    left=stock+teamZone(g,1-mine,false);
+    label='Smazzata '+g.round+(g.points?' · ultima +'+g.points[mine]+' / +'+g.points[1-mine]:'')+' · si vince a 11';
+    cards=g.table.map(c=>scopaFace(c,'--tilt:'+tiltOf(c)+'deg')).join('');
+    right=bankTray()+teamZone(g,mine,true);
+  } else {
+    const tilt=card=>'--tilt:'+tiltOf(card)+'deg';
+    const top=playingCard('uno',g.top,'',false,false,tilt(g.top));
+    left=stock;
+    label='Colore attivo · <b class="uno-ink uno-ink-'+escape(g.color)+'">'+unoColors[g.color]+'</b>';
+    cards='<span class="discard">'+(underTop&&underTop!==g.top?playingCard('uno',underTop,'',false,false,tilt(underTop),'under'):'')+
+      (cardHints?cardCaption(top,unoColors[g.color]):top)+'</span>'+(g.top.startsWith('W:')?'<i class="wild-color uno-'+escape(g.color)+'" role="img" aria-label="Colore scelto: '+unoColors[g.color]+'"></i>':'');
+    const reverse=g.direction===-1;
+    right=total>2?'<div class="direction '+(reverse?'ccw':'cw')+'" role="img" aria-label="'+(reverse?'Giro antiorario':'Giro orario')+'"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 8a24 24 0 0 1 22 14M32 56a24 24 0 0 1-22-14" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M57 9v15H42zM7 55V40h15z" fill="currentColor"/></svg><small>'+(reverse?'Giro antiorario':'Giro orario')+'</small></div>':'';
+  }
   const n=g.hand.length, squeeze=Math.max(0,Math.min(22,(n-6)*3));
-  return '<div class="card-table table-'+g.id+'"'+(scopa?' data-deck="'+scopaDeck+'"':' data-color="'+escape(g.color)+'"')+'>'+'<div class="card-table-meta"><span>'+info+'</span><span class="table-tools">'+deck+'<button class="outline card-help" data-action="card-hints" title="Indicazioni di accessibilità" aria-label="Indicazioni di accessibilità" aria-pressed="'+cardHints+'">♿</button></span></div>'+(cardHints?'<small class="card-hint">Doppio clic o trascina sul tavolo. Da tastiera, premi Invio.</small>':'')+
-    '<div class="table-side">'+opponentHand(g)+cardPiles(g)+'</div><div class="table-main"><div class="card-center"><h3>'+(scopa?'Sul tavolo':'Carta in cima')+'</h3>'+table+'</div>'+
-    '<h3>La tua mano</h3><div class="card-line hand'+(n<=12?' fan':'')+'" style="--squeeze:'+squeeze+'px;--n-half:'+((n-1)/2).toFixed(1)+'">'+g.hand.map((c,i)=>{
+  return '<div class="card-table table-'+g.id+'"'+(scopa?' data-deck="'+scopaDeck+'"':' data-color="'+escape(g.color)+'"')+' data-seats="'+total+'">'+
+    '<div class="table-stage"><div class="table-ring"><div class="table-rail"><div class="table-felt"><div class="felt-grid">'+
+    '<div class="felt-side left">'+left+'</div><div class="card-center"><h3 class="felt-label">'+label+'</h3><div class="card-line">'+cards+'</div></div><div class="felt-side right">'+right+'</div>'+
+    '</div></div></div>'+tableSeats(g)+'</div></div>'+
+    (cardHints?'<small class="card-hint">Doppio clic o trascina sul tavolo. Da tastiera, premi Invio.</small>':'')+
+    '<h3 class="sr-only">La tua mano</h3><div class="card-line hand'+(n<=12?' fan':'')+'" style="--squeeze:'+squeeze+'px;--n-half:'+((n-1)/2).toFixed(1)+'">'+g.hand.map((c,i)=>{
       const vars='--i:'+i+';--o:'+(i-(n-1)/2).toFixed(2);
       const face=playingCard(g.id,c,'data-hand="'+c+'"'+(cardHints?'':' style="'+vars+'"'),active&&(scopa||g.playable.includes(c)),selectedCard===c);
       return cardHints?cardCaption(face,scopa?cardFace(g.id,c).label:unoColors[c[0]],vars):face;
     }).join('')+'</div>'+
     '<div class="card-moves">'+(scopa?options.map((take,i)=>'<button class="primary" data-take="'+i+'">'+(take.length?'Prendi '+take.map(c=>cardFace(g.id,c).label).join(' + '):'Lascia sul tavolo')+'</button>').join(''):
-    (active?'<button class="outline" data-action="'+(g.drawn?'uno-pass':'uno-draw')+'">'+(g.drawn?'Passa':'Pesca')+'</button>':''))+'</div></div></div>';
+    (active?'<button class="outline" data-action="'+(g.drawn?'uno-pass':'uno-draw')+'">'+(g.drawn?'Passa':'Pesca')+'</button>':''))+'</div></div>';
 }
 function strategyBoard(g) {
   const active=acting();
-  const newest=state.version>drawnVersion;
+  const newest=isFresh();
   if(g.id==='go') {
     const files='ABCDEFGHJ', ranks='987654321', moves=g.moves?new Set(g.moves):null, stars=new Set([20,24,40,56,60]);
     const stones=g.board.map((v,i)=>{
@@ -1011,8 +1159,21 @@ function room() {
     '<div class="closure-notice"><span role="status">'+escape(s.players[s.closeRequest])+' chiede di chiudere la partita.</span><div><button class="outline" data-action="decline-close" '+disabled+'>Rifiuta</button><button class="primary" data-action="accept-close" '+disabled+'>Accetta</button></div></div>';
   const capacity=s.maxPlayers??2;
   const free=capacity-s.players.length;
+  const asked=s.rematch??[];
+  const others=asked.filter(i=>i!==s.side).map(i=>s.players[i]);
+  const again=g.result===null||s.closed||!Array.isArray(s.rematch)?'':asked.includes(s.side)?
+    '<div class="closure-notice rematch" role="status">Rivincita richiesta. In attesa '+(capacity>2?'degli altri giocatori ('+asked.length+' di '+capacity+').':'dell’avversario.')+'</div>':
+    '<div class="closure-notice rematch"><span role="status">'+(others.length?escape(others.join(', '))+(others.length>1?' vogliono':' vuole')+' la rivincita.':'Partita conclusa. Ne giocate un’altra in questa stanza?')+'</span><div><button class="primary" data-action="rematch" '+disabled+'>'+icon('redo')+'Rivincita</button></div></div>';
   const canInvite=free>0&&!s.closed&&g.result===null&&s.closeRequest==null;
   const invite=canInvite?'<button class="primary room-invite" data-action="invite" aria-label="Invita giocatori: copia il link della stanza">'+icon('link')+'Invita giocatori</button>':'';
+  const cards=['scopa','uno'].includes(g.id);
+  // In two-player board games the opponent sits across the board and you sit below it.
+  const around=!cards&&g.id!=='naval'&&capacity===2;
+  const plate=i=>{
+    const seated=i<s.players.length;
+    return '<div class="player'+(seatHasTurn(s,i)?' current':'')+(seated?'':' vacant')+'" data-seat="'+i+'"><span class="avatar seat-'+i+'" aria-hidden="true">'+(seated?initial(s.players[i],s.playerMarkup?.[i]):'+')+'</span><span><strong title="'+escape(s.players[i]??'Posto libero')+'">'+displayNickname(s.players[i]??'Posto libero',s.playerMarkup?.[i])+(i===s.side?' (tu)':'')+'</strong><small>'+(s.maxPlayers>2?(g.id==='scopa'?'Squadra '+(i%2+1):'Posto '+(i+1)):meta.players[i])+'</small></span>'+(seated?chipStat(s,i):'')+'</div>';
+  };
+  const board=tab!=='play'?'':g.id==='naval'?naval(g):cards?cardTable(g):['go','dots','nim','backgammon'].includes(g.id)?strategyBoard(g):checker(g);
   return '<div class="room-title phase-header"><div class="room-identity"><div class="room-heading"><span class="room-thumbnail '+meta.color+'" aria-hidden="true"><span>'+art(g.id)+'</span></span><div><h1>'+(g.id==='scopa'&&capacity===4?'Scopone scientifico':meta.name)+'</h1>'+
     '<div class="room-byline">'+(s.roomName?'<strong>'+escape(s.roomName)+'</strong>':'')+'<span>'+s.players.length+' / '+capacity+' giocatori</span>'+
     (canInvite?'<span>'+free+(free===1?' posto libero':' posti liberi')+'</span>':'')+'</div></div></div>'+invite+'</div>'+
@@ -1021,21 +1182,20 @@ function room() {
     (hasMoveHistory?'<button class="outline" data-action="moves" aria-expanded="'+showMoves+'">'+icon('history')+'Mosse</button>':'')+
     '<button class="outline" id="chat-toggle" data-action="chat" aria-expanded="'+chatOpen+'">'+chatLabel(s)+'</button>'+
     (!s.closed&&g.result===null&&s.closeRequest==null?'<button class="link close-game" data-action="close-game" aria-label="Chiudi partita" title="Chiudi partita" '+disabled+'>'+icon('close')+'<span>Chiudi partita</span></button>':'')+'</div></div></div>'+
-    closure+'<div class="room-layout'+(dock?' has-dock':'')+(tab==='play'&&seatHasTurn(s,s.side)&&!pending?' your-turn':'')+'">'+
+    closure+again+'<div class="room-layout'+(dock?' has-dock':'')+(tab==='play'&&seatHasTurn(s,s.side)&&!pending?' your-turn':'')+'">'+
     '<div id="tabpanel" role="tabpanel" aria-labelledby="tab-'+tab+'">'+(tab==='rules'?rules(g.id,tabChanged):
-    '<div class="match">'+'<div class="banner '+tone+'" role="status"><i></i>'+escape(wording)+'</div>'+(['scopa','uno'].includes(g.id)?'':'<div class="players">'+Array.from({length:capacity},(_,i)=>{
-      const seated=i<s.players.length;
-      return '<div class="player'+(seatHasTurn(s,i)?' current':'')+(seated?'':' vacant')+'" data-seat="'+i+'"><span class="avatar seat-'+i+'" aria-hidden="true">'+(seated?initial(s.players[i],s.playerMarkup?.[i]):'+')+'</span><span><strong title="'+escape(s.players[i]??'Posto libero')+'">'+displayNickname(s.players[i]??'Posto libero',s.playerMarkup?.[i])+(i===s.side?' (tu)':'')+'</strong><small>'+(s.maxPlayers>2?(g.id==='scopa'?'Squadra '+(i%2+1):'Posto '+(i+1)):meta.players[i])+'</small></span>'+(seated?chipStat(s,i):'')+'</div>';
-    }).join('')+'</div>')+
+    '<div class="match"'+(elapsedStyle()?' style="'+elapsedStyle()+'"':'')+'>'+
+    '<div class="banner-row"><div class="banner '+tone+'" role="status"><i></i>'+escape(wording)+'</div>'+(cards?cardTools(g):'')+'</div>'+
     pass+turnNotes(s,acting()).map(note=>'<p class="subnote turn-note" role="status">'+escape(note)+'</p>').join('')+
-    (g.id==='naval'?naval(g):['scopa','uno'].includes(g.id)?cardTable(g):['go','dots','nim','backgammon'].includes(g.id)?strategyBoard(g):checker(g))+
+    (cards?board:around?'<div class="duel"><div class="players top">'+plate(1-s.side)+'</div><div class="duel-board">'+board+'</div><div class="players bottom">'+plate(s.side)+'</div></div>':
+      '<div class="players">'+Array.from({length:capacity},(_,i)=>plate(i)).join('')+'</div>'+board)+
     '<div class="match-actions">'+(g.canDraw&&acting()?'<button class="outline" data-action="draw">'+icon('draw')+'Richiedi patta</button>':'')+
     (pending&&!busy?'<button class="primary" data-action="retry">'+icon('redo')+'Recupera mossa</button>':'')+
     (prefix.length?'<button class="link" data-action="cancel">Annulla selezione</button>':'')+
     '</div></div>')+'</div>'+
     (dock?'<aside class="side-dock" aria-label="'+(showMoves&&chatOpen?'Mosse e chat':showMoves?'Mosse':'Chat')+'"><div class="dock-inner">'+(showMoves?movePanel(g):'')+(chatOpen?chatPanel():'')+'</div></aside>':'')+'</div>';
 }
-let paintedRoom=null;
+let paintedRoom=null, arrivedAt=0;
 const baseTitle=document.title;
 function updateTitle() {
   if(!state){document.title=baseTitle;return;}
@@ -1057,8 +1217,10 @@ function render() {
     expired?'<section class="entry"><h1>Stanza non disponibile</h1><p>La partita potrebbe essere scaduta o il server locale potrebbe essere stato riavviato.</p><a class="primary" href="/">Torna alla Home</a></section>':
     restoreError?'<section class="entry"><h1>Connessione interrotta</h1><p>'+restoreError+'</p><button class="primary" data-action="restore">Riprova</button></section>':
     '<section class="entry"><h1>Entra nella partita.</h1><p>Servono solo il tuo nickname e il link di invito.</p><button class="primary" data-action="enter">Scegli il nickname</button></section>';
-  app.classList.toggle('arrive',Boolean(state)&&paintedRoom!==code&&fx.lively());
-  if(state)paintedRoom=code;
+  if(state&&paintedRoom!==code){paintedRoom=code;arrivedAt=performance.now();}
+  const arriving=Boolean(state)&&fx.lively()&&performance.now()-arrivedAt<1100;
+  app.classList.toggle('arrive',arriving);
+  app.style.setProperty('--arrive-elapsed',arriving?'-'+Math.round(performance.now()-arrivedAt)+'ms':'0ms');
   app.innerHTML=state?room():code?entry:lobby();
   updateTitle();
   
@@ -1073,7 +1235,7 @@ function render() {
   if(moveList)moveList.scrollTop=moveList.scrollHeight;
   joinButton.hidden=!!state;
   paintRooms();
-  if(state&&tab==='play')drawnVersion=state.version;
+  fx.reconceal(app);
   if(focusData) {
     const [key,value]=focusData;
     const button=Array.from(app.querySelectorAll('button')).find(el=>el.dataset[key]===value);
@@ -1102,22 +1264,25 @@ async function send(action) {
     catch(error){toast(error.message);return;}
   }
   busy=true;render();
-  try {
-    const next=await api('/moves',pending);
+  let answer=null, failure=null;
+  try {answer=await api('/moves',pending);}
+  catch(error) {failure=error;}
+  busy=false;
+  const pushed=held, before=state;
+  held=null;
+  if(answer) {
     savePending(null);
-    if(!state || next.version>state.version) {
-      busy=false;
-      accept(next);
-      return;
-    }
+    accept(pushed&&pushed.version>answer.version?pushed:answer);
+  } else if(failure.status&&failure.status<500) {
+    savePending(null);
+    toast(failure.message);
+    if(pushed)accept(pushed);
+    try {accept(await api());}catch {}
+  } else {
+    toast('Connessione interrotta. Puoi recuperare la stessa mossa.');
+    if(pushed)accept(pushed);
   }
-  catch(error) {
-    if(error.status&&error.status<500) {
-      savePending(null);
-      toast(error.message);
-      try {accept(await api());}catch {}
-    } else toast('Connessione interrotta. Puoi recuperare la stessa mossa.');
-  } finally {if(busy){busy=false;render();}}
+  if(state===before)render();
 }
 function playCell(i) {
   if(!acting())return;
@@ -1513,6 +1678,7 @@ app.addEventListener('click',async e=>{
     case 'retry': send();break;
     case 'close-game': showModal('<h2>Chiudere la partita?</h2><p>'+(state.requiresConsent?'L’altra persona ha già giocato. La partita si chiuderà se accetta.':'La stanza verrà chiusa subito.')+'</p><button class="primary" data-confirm>'+(state.requiresConsent?'Invia richiesta':'Chiudi partita')+'</button>');break;
     case 'accept-close': send({close:'accept'});break;
+    case 'rematch': send({rematch:true});break;
     case 'decline-close': send({close:'decline'});break;
   }
 });

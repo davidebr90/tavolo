@@ -1,10 +1,35 @@
 import { start, play, view } from './games.mjs';
 import { parseChat } from '../public/chat-format.mjs';
-export const sessionLifetime=24*60*60*1000;
+// A room lives for a week after its last move, join or message.
+export const sessionLifetime=7*24*60*60*1000;
 const capacity=room=>room.game.hands?.length??2;
 export function create(game,name,token,options,markup,roomName) {
   const createdAt=Date.now();
-  return {game:start(game,options),players:[{name,token,markup}],version:0,receipts:{},roomName,createdAt,updatedAt:createdAt};
+  return {game:start(game,options),players:[{name,token,markup}],version:0,receipts:{},roomName,options:options??null,createdAt,updatedAt:createdAt};
+}
+// Options to start the same kind of game again, also for rooms created before they were stored.
+function restartOptions(room) {
+  if(room.options)return room.options;
+  const g=room.game;
+  if(g.id==='naval')return {size:g.size??10,ships:g.lengths?.length??5};
+  if(g.hands)return {players:g.hands.length};
+  return undefined;
+}
+// Every player must ask. Then the seats rotate, so whoever moved second now moves first.
+function rematch(room,side) {
+  if(room.closed||room.game.result===null) throw Error('La rivincita è disponibile a partita conclusa.');
+  const asked=new Set(room.rematch??[]);
+  asked.add(side);
+  if(asked.size<room.players.length) {room.rematch=[...asked].sort();return false;}
+  const seats=room.players.length;
+  room.players.push(room.players.shift());
+  for(const message of room.chat??[]) message.side=(message.side+seats-1)%seats;
+  room.game=start(room.game.id,restartOptions(room));
+  room.rematch=[];
+  room.moved=room.players.map(()=>false);
+  room.closeRequest=null;
+  room.games=(room.games??1)+1;
+  return true;
 }
 function seat(room,token) {
   if(typeof token!=='string'||!token) throw new Error('Accesso alla stanza non valido.');
@@ -54,8 +79,16 @@ export function submit(room,token,message) {
   const key=side+':'+message.id;
   if(Object.hasOwn(room.receipts,key)) return false;
   if(message.version!==room.version) throw new Error('La partita è cambiata. Riprova.');
-  if(room.closed || room.game.result!==null) throw Error('La partita è terminata.');
   const action=message.action;
+  if(action?.rematch===true) {
+    const restarted=rematch(room,side);
+    room.version++;
+    room.receipts[key]=room.version;
+    // After the seats rotate, a retry of this request arrives from the new seat.
+    if(restarted) room.receipts[seat(room,token)+':'+message.id]=room.version;
+    return true;
+  }
+  if(room.closed || room.game.result!==null) throw Error('La partita è terminata.');
   const moved=movedSeats(room);
   if(action?.close) {
     room.moved=moved;
@@ -75,7 +108,7 @@ export function submit(room,token,message) {
 export function snapshot(room,token) {
   const side=seat(room,token);
   return {side,maxPlayers:capacity(room),players:room.players.map(p=>p.name),playerMarkup:room.players.map(p=>p.markup??null),version:room.version,game:view(room.game,side),chat:room.chat??[],chatVersion:room.chatVersion??0,
-    roomName:room.roomName??null,createdAt:room.createdAt??null,
+    roomName:room.roomName??null,createdAt:room.createdAt??null,rematch:room.rematch??[],games:room.games??1,
     closed:room.closed===true,closeRequest:room.closeRequest??null,requiresConsent:movedSeats(room).some((value,i)=>value&&i!==side)};
 }
 export function chat(room,token,data) {

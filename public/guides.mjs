@@ -31,8 +31,8 @@ export const guides={
   ],
   uno:[
     ['Preparazione e abbinamenti','Inizi con sette carte. Si gioca su una carta scoperta abbinandone colore, numero o azione. Per esempio, sopra un 5 rosso puoi giocare un altro 5 o una carta rossa. Il jolly cambia il colore attivo e il tavolo prende quel colore.'],
-    ['Pesca o passa','Puoi pescare anche se hai una carta giocabile. Se la carta pescata è valida, puoi giocare solo quella oppure passare. Se non è valida, il turno passa automaticamente.'],
-    ['Da 3 a 10 giocatori','Inverti cambia il verso di gioco: l’indicatore in alto sul tavolo mostra se il giro è orario o antiorario. Salta, +2 e +4 colpiscono il giocatore successivo nel verso corrente.'],
+    ['Pesca o passa','Puoi pescare anche se hai una carta giocabile, con il pulsante Pesca o cliccando il mazzo. Se la carta pescata è valida, puoi giocare solo quella oppure passare. Se non è valida, il turno passa automaticamente.'],
+    ['Da 3 a 10 giocatori','Inverti cambia il verso di gioco: le frecce sul feltro mostrano se il giro è orario o antiorario. I giocatori siedono attorno al tavolo in ordine di turno, in senso orario a partire dalla tua sinistra. Salta, +2 e +4 colpiscono il giocatore successivo nel verso corrente.'],
     ['Azioni in due','Salta e Inverti ti fanno giocare ancora. Con +2 o +4 l’avversario pesca e il turno torna a te. Tavolo ti chiede quale colore impostare dopo un jolly.'],
     ['Penalità e casi particolari',['+2: il giocatore successivo pesca due carte e salta il turno. +4: ne pesca quattro e salta il turno.','I +2 e i +4 non si accumulano: la penalità si applica subito a chi segue.','Il +4 si può giocare solo senza carte del colore attivo. Tavolo lo disattiva negli altri casi, quindi non serve contestarlo.','UNO viene dichiarato da Tavolo in automatico: non esiste la penalità per averlo dimenticato.','Quando il mazzo finisce, gli scarti vengono rimescolati, tranne la carta in cima.'],'warn'],
     ['Vittoria','Vince chi finisce per primo le carte. Si gioca una mano singola, con una carta numerica iniziale. Le carte che puoi giocare sono illuminate, le altre restano in ombra.'],

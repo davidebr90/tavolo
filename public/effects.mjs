@@ -44,7 +44,10 @@ function cardEffects(a,b,side) {
   if(b.id==='scopa') {
     if(b.last.take?.length)fx.push({type:'take',count:b.last.take.length+1,team:b.last.side%2});
     (b.sweeps??[]).forEach((n,team)=>{if(n>(a.sweeps?.[team]??0))fx.push({type:'sweep',team,mine:team===side%2});});
-    if(a.round!==b.round)fx.push({type:'round',round:b.round,scores:b.scores});
+    // A smazzata just ended: the bank pays one chip per point, also on the last one of the game.
+    const roundEnded=a.round!==b.round||(a.result===null&&b.result!==null);
+    if(roundEnded&&Array.isArray(b.points))fx.push({type:'points',points:b.points,scores:b.scores});
+    if(a.round!==b.round)fx.push({type:'round',round:b.round,scores:b.scores,points:b.points??[]});
     return fx;
   }
   if(b.last.type==='play'&&typeof b.last.card==='string') {
@@ -111,6 +114,7 @@ export function moveEffects(prev,next) {
   if(!prev?.game||!next?.game||prev.game.id!==next.game.id||!(next.version>prev.version))return out;
   const a=prev.game, b=next.game, side=next.side, capacity=next.maxPlayers??2;
   if(prev.players.length<capacity&&next.players.length===capacity)out.push({type:'start'});
+  else if(a.result!==null&&b.result===null&&!next.closed)out.push({type:'start',rematch:true});
   else if(next.players.length>prev.players.length)out.push({type:'join',seat:next.players.length-1});
   if(b.id==='naval')out.push(...navalEffects(a,b));
   else if(b.last&&!same(a.last,b.last))out.push(...gameEffects(a,b,side));

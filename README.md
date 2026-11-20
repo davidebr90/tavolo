@@ -43,12 +43,12 @@ Il profilo raccoglie le tue stanze e il tuo nickname, senza password. Si crea da
 - La chiave del profilo sta dopo `#profilo=` nel link. Il browser non la invia al server e Tavolo la toglie dalla barra degli indirizzi appena aperta. Il server conserva il profilo sotto un'impronta SHA-256 della chiave.
 - Chi apre il link entra nel profilo e gioca al tuo posto: tienilo per te.
 - Dal menu puoi dare un nome al profilo, crearne un altro, passare a mano tra i profili ricordati sul dispositivo, aprirne uno incollando il link o dimenticarlo sul dispositivo. Il link continua a funzionare.
-- Le stanze rimosse su un dispositivo spariscono anche dagli altri. Le stanze scadono comunque dopo 24 ore senza attività; il profilo dopo 90 giorni senza utilizzo.
+- Le stanze rimosse su un dispositivo spariscono anche dagli altri. Le stanze scadono comunque dopo 7 giorni senza attività; il profilo dopo 90 giorni senza utilizzo.
 - Su Cloudflare ogni profilo è un Durable Object `PlayerProfile` (migrazione `v2` in `wrangler.jsonc`). In locale i profili stanno nella cartella `profili` accanto alle stanze.
 
 Da **Home → Partite in corso** puoi controllare e riprendere più stanze. **Chiudi partita** chiude subito se l’altra persona non ha ancora fatto una mossa. Altrimenti la stanza resta attiva finché l’altro giocatore accetta. Se rifiuta, si continua a giocare. Gli avvisi si aggiornano mentre Tavolo resta aperto. In locale le stanze sono salvate sotto la cartella temporanea del sistema, in Tavolo. Un riavvio di Node dalla stessa installazione permette di riprendere la partita dallo stesso link e dallo stesso browser, o dal link personale del profilo. Per scegliere una cartella diversa, imposta TAVOLO_ROOM_DIR prima di avviare il server.
 
-Ogni stanza mantiene gli ultimi 50 messaggi, con un massimo di 280 caratteri per messaggio. La sessione scade dopo 24 ore senza mosse, accesso del secondo giocatore o messaggi. Il server locale rimuove i file scaduti e il Worker pianifica la rimozione della riga di stato.
+Ogni stanza mantiene gli ultimi 50 messaggi, con un massimo di 280 caratteri per messaggio. La stanza scade dopo 7 giorni senza mosse, ingressi o messaggi. A partita conclusa compare **Rivincita**: quando tutti i giocatori la chiedono, nella stessa stanza parte una nuova partita e i posti ruotano, così apre chi prima muoveva per secondo. Il server locale rimuove i file scaduti e il Worker pianifica la rimozione della riga di stato.
 
 ## Verifica
 
@@ -81,6 +81,15 @@ Il pulsante ✦ in alto riduce gli effetti al minimo e la scelta resta in questo
 
 - `public/effects.mjs` confronta due stati della stanza e descrive cosa è cambiato. È testato in `test/effects.test.mjs`.
 - `public/motion.mjs` disegna particelle, voli delle carte, spostamenti dei pezzi e annunci.
+
+## Il tavolo da carte
+
+Scopa, Scopone e UNO si giocano a un tavolo ovale. Tu siedi in basso e gli altri giocatori sono disposti attorno, in senso orario a partire dalla tua sinistra, ognuno con il ventaglio delle sue carte coperte. Un segnalino d'ottone sul feltro indica chi è di turno.
+
+- Chi gioca una carta la lancia con la mano: la carta scivola ruotando fino al suo posto. In una presa la mano del giocatore raccoglie le carte e le porta al suo mazzetto.
+- In Scopa i punti sono fiches. A fine smazzata il banco paga una fiche per ogni punto, e ogni scopa vale subito una fiche d'oro.
+- In UNO chi pesca allunga la mano sul mazzo. Puoi pescare cliccando il mazzo, e le frecce sul feltro mostrano il verso del giro.
+- Nei giochi a due l'avversario siede sopra la plancia e tu sotto, o ai due angoli quando c'è spazio a lato.
 
 ## Chat, mosse e nickname
 
