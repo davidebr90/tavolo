@@ -1,10 +1,12 @@
 import { guides } from './guides.mjs';
 import { catalog } from './catalog.mjs';
-import { savedSeats, roomStatus, roomTransport, watchRoom, chatEntries, unreadChat, lastChessMove } from './rooms.mjs';
+import { savedSeats, roomStatus, roomTransport, watchRoom, chatEntries, unreadChat, lastChessMove, isTeamRoom } from './rooms.mjs';
+import { renderBriscola } from './briscola.mjs';
+import { pokerTable } from './poker-table.mjs';
 import { icon } from './icons.mjs';
 import { parseChat, chatColors, renderChatMessage } from './chat-format.mjs';
 import { cardKey, cardSvg, loadDeck, scopaDecks } from './card-art.mjs';
-import { moveEffects, seatHasTurn, kingSquare } from './effects.mjs';
+import { moveEffects, seatHasTurn, kingSquare, cardTransition, scopaProgress } from './effects.mjs';
 import * as fx from './motion.mjs';
 import { version, updatedAt } from './version.mjs';
 import { shipTiles, shipSectors as fleetSectors, rotateShip } from './fleet.mjs';
@@ -21,6 +23,8 @@ let toastTimer, stopLive, restoring=false, restoreError='', expired=false, trans
 const seenRooms=new Map(), monitors=new Map(), unavailable=new Set();
 const closingRooms=new Set();
 let chatOpen=false, chatDraft='', selectedCard=null, hoverAt=null, drag=null;
+let pokerDraftKey='', raiseTo=null;
+const discards=new Set();
 const compactRoom=matchMedia('(max-width: 900px)');
 let movesOpen=!compactRoom.matches;
 const chatCursor=room=>Number(localStorage.getItem('tavolo:chat-read:'+room))||0;
@@ -103,7 +107,7 @@ function closeMessage(current,command) {
   if(typeof current.closed!=='boolean') throw Error('Il server usa una versione precedente. Riavvia node dev.mjs per abilitare la chiusura.');
   return {id:random(16),version:current.version,action:{close:command}};
 }
-function accept(next) {
+function accept(next,{joining=false,reconnect=false}={}) {
   if(state && next.version<state.version) return;
   if(state && next.version===state.version) {
     if((next.chatVersion??0)>(state.chatVersion??0)) {
@@ -117,7 +121,8 @@ function accept(next) {
   const incoming=next.game.id==='naval'&&state?.game.id==='naval'&&next.game.incoming.length>state.game.incoming.length?next.game.incoming.at(-1):null;
   if(incoming)navalView='own-fleet';
   const previousRoom=state;
-  const cardOrigins=cardSnapshot(next.game.id);
+  const transition=reconnect?null:cardTransition(state,next,joining);
+  const cardOrigins=transition?cardSnapshot():null;
   const boardOrigins=boardSnapshot(next.game.id);
   notifyClosure(state,next);
   state=next;
@@ -126,8 +131,15 @@ function accept(next) {
   seenRooms.set(code,next);
   render();
   if(incoming)showStrike(incoming);
-  animateCards(previousRoom,next,cardOrigins);
-  playEffects(moveEffects(previousRoom,next),previousRoom,next,boardOrigins);
+  if(cardOrigins)animateCards(next,transition,cardOrigins);
+  if(!reconnect&&tab==='play'&&fx.lively()&&!document.hidden&&(joining||previousRoom?.version===next.version-1)&&(next.game.id==='poker-italiano'||next.game.id==='texas-holdem')) {
+    const old=previousRoom?.game, fresh=!old||previousRoom.players.length<next.maxPlayers||old.round!==next.game.round;
+    const cards=[...app.querySelectorAll('[data-board-card],[data-pocket-card]')].filter(el=>
+      fresh||(el.dataset.boardCard?!old.board.includes(el.dataset.boardCard):!old.hand.includes(el.dataset.pocketCard)));
+    cards.forEach((el,i)=>el.animate([{opacity:0,transform:'translateY(-12px) rotate(-4deg)'},{opacity:1,transform:'none'}],
+      {duration:250,delay:i*85,fill:'backwards',easing:'ease-out'}));
+  }
+  if(!reconnect)playEffects(moveEffects(previousRoom,next),previousRoom,next,boardOrigins);
   draggedMove=false;
 }
 function setConnected(value) {
@@ -139,12 +151,13 @@ async function live() {
   await settings;
   if(!code||!token||state?.closed||state?.game.result!==null)return;
   stopLive?.();
-  stopLive=watchRoom({code,token},transport,next=>{
+  stopLive=watchRoom({code,token},transport,(next,transportState)=>{
+    const reconnect=!connected||transportState?.reconnect===true;
     if(!connected) {
       connected=true;
       if(state?.version===next.version)render();
     }
-    accept(next);
+    accept(next,{reconnect});
     if(state?.closed||state?.game.result!=null)stopLive?.();
   },()=>api(),{interval:1200,onError:error=>{
     if(error.status===404) {
@@ -166,7 +179,7 @@ async function restoreRoom() {
     expired=false;
     connected=true;
     if(state?.version===next.version) {accept(next);render();}
-    else accept(next);
+    else accept(next,{reconnect:true});
     live();
   } catch(error) {
     expired=error.status===404;
@@ -243,13 +256,13 @@ function nameDialog(gameId) {
     profileAdd(code,token);
     history.replaceState({},'',href());
     setConnected(true);
-    accept(next);
+    accept(next,{joining:true});
     live();
   },localStorage.getItem('tavolo:nickname')??'',true);
   if(gameId)modal.querySelector('.form').insertAdjacentHTML('afterbegin','<label class="room-name-label" for="room-name">Nome della stanza <input id="room-name" maxlength="48" placeholder="Facoltativo"></label>');
   if(gameId) {
-    const counts=gameId==='scopa'?[2,4]:gameId==='uno'?Array.from({length:9},(_,i)=>i+2):[2];
-    const description=n=>gameId==='scopa'?(n===4?'Scopone scientifico · Due coppie, posti alternati. Dieci carte ciascuno, tavolo vuoto.':'Scopa classica · Tre carte ciascuno e quattro sul tavolo.'):n+' posti. La partita inizia quando tutti sono entrati.';
+    const counts=catalog[gameId].seats??[2];
+    const description=n=>gameId==='scopa'?(n===4?'Scopone scientifico · Due coppie, posti alternati. Dieci carte ciascuno, tavolo vuoto.':'Scopa classica · Tre carte ciascuno e quattro sul tavolo.'):gameId==='briscola'&&n===4?'Due coppie a posti alternati. Si gioca una smazzata da 120 punti.':n+' posti. La partita inizia quando tutti sono entrati.';
     const field=counts.length===1?'<strong>2 giocatori</strong>':'<label>Giocatori da attendere <select id="room-players">'+counts.map(n=>'<option value="'+n+'">'+n+(gameId==='scopa'?(n===4?' · Scopone scientifico':' · Scopa classica'):' giocatori')+'</option>').join('')+'</select></label>';
     modal.querySelector('.room-name-label').insertAdjacentHTML('afterend','<div class="room-capacity">'+field+'<small aria-live="polite">'+description(2)+'</small></div>');
     const select=modal.querySelector('#room-players');
@@ -288,6 +301,9 @@ function art(id) {
     case 'dama': return scene('duo dama','<i></i><i></i>');
     case 'tris': return scene('tris','<svg viewBox="0 0 96 96" aria-hidden="true"><path class="grid" d="M33 6v84M63 6v84M6 33h84M6 63h84"/><path class="x" pathLength="1" d="M12 12l14 14M26 12 12 26"/><circle class="o" pathLength="1" cx="48" cy="48" r="9"/><path class="x" pathLength="1" d="M70 70l14 14M84 70 70 84"/></svg>');
     case 'scopa': return scene('fan scopa','<i></i><i></i><i></i>');
+    case 'briscola': return scene('fan scopa','<i></i><i></i><i></i>');
+    case 'poker-italiano': return scene('fan poker','<i>J♣</i><i>Q♦</i><i>K♠</i>');
+    case 'texas-holdem': return scene('fan poker','<i>K♣</i><i>A♥</i><i>A♠</i>');
     case 'uno': return scene('fan uno','<i><b>7</b></i><i><b>+2</b></i><i><b>↺</b></i>');
     case 'backgammon': return scene('dice','<i class="die-art">'+pips(5)+'</i><i class="die-art">'+pips(3)+'</i>');
     case 'go': return scene('go','<i></i><i class="w"></i><i></i><i class="w"></i><i></i>');
@@ -309,7 +325,7 @@ function lobby() {
 }
 const gameFilters={all:'Tutti',board:'Da tavolo',cards:'Carte',quick:'Veloci'};
 let gameQuery='',gameFilter='all',attentionOnly=false;
-const gameType=id=>['uno','scopa'].includes(id)?'cards':['tris','four','nim','dots'].includes(id)?'quick':'board';
+const gameType=id=>catalog[id].category==='Carte'?'cards':['tris','four','nim','dots'].includes(id)?'quick':'board';
 function filterCatalog() {
   const query=gameQuery.trim().toLocaleLowerCase('it');
   let count=0;
@@ -420,9 +436,9 @@ async function monitorRooms() {
       seenRooms.set(entry.code,next);
       unavailable.delete(entry.code);
       if(!notifyClosure(previous,next)&&previous&&roomStatus(previous).tone!=='your'&&roomStatus(next).tone==='your')
-        toast('Tocca a te · '+catalog[next.game.id].name+' con '+next.players[1-next.side]);
+        toast('Tocca a te · '+(next.roomName||catalog[next.game.id].name));
       else if(previous&&unreadChat(next,Math.max(chatCursor(entry.code),previous.chatVersion??0)).length)
-        toast('Nuovo messaggio · '+catalog[next.game.id].name+' con '+next.players[1-next.side]);
+        toast('Nuovo messaggio · '+(next.roomName||catalog[next.game.id].name));
       paintRooms();
       if(next.closed||next.game.result!==null) {
         monitors.get(entry.code)?.();
@@ -473,7 +489,7 @@ function rules(id,enter=true) {
 function banner(s) {
   const g=s.game;
   if(s.closed) return ['neutral','Partita chiusa'];
-  if(g.result!==null&&g.id==='scopa'&&s.maxPlayers===4)return ['neutral','Ha vinto la squadra '+(g.result+1)];
+  if(Number.isInteger(g.result)&&isTeamRoom(s))return ['neutral','Ha vinto la squadra '+(g.result+1)];
   if(g.result!==null) return ['neutral',g.result==='draw'?'Partita pari':g.result===s.side?'Hai vinto!':s.players[g.result]+' ha vinto'];
   if(!connected) return ['neutral','Riconnessione…'];
   if(pending) return ['neutral',busy?(pending.action.close?'Chiusura in invio…':'Mossa in invio…'):'Conferma da recuperare'];
@@ -684,14 +700,14 @@ function playEffects(list,prev,next,before) {
       fx.announce('Scopa!',{tone:e.mine?'gold':'red',sub:e.mine?'':'per gli avversari'});
       if(e.mine)fx.burstAt(q('.card-center'),{kind:'confetti',count:60,colors:fx.palettes.festa,speed:[4,11],angle:[-Math.PI*.9,-Math.PI*.1],gravity:.2,life:[1200,2000],size:[3,6]});
     });break;
-    case 'round': later(900,()=>fx.announce('Smazzata '+e.round,{tone:'teal',sub:'Punti '+e.scores[next.side%2]+' – '+e.scores[1-next.side%2],hold:1300}));break;
+    case 'round': fx.flash(q('.scopa-progress'),'new-round',1200);break;
     case 'wild': later(own?520:700,()=>{const top=q('.card-center .playing-card');fx.ring(top,{color:({R:'#ff6b5a',G:'#3fd087',B:'#4d95f0',Y:'#ffd84d'})[e.color],scale:2.6,duration:900,width:4});fx.burstAt(top,{kind:'star',count:30,colors:fx.palettes[e.color]??fx.palettes.festa,speed:[2,7],life:[600,1100]});});break;
     case 'penalty': later(700,()=>fx.announce('+'+e.amount,{tone:'red',hold:700}));break;
     case 'reverse': later(own?520:700,()=>q('.card-center .playing-card')?.animate([{transform:'none'},{transform:'rotate(-360deg) scale(1.15)',offset:.7},{transform:'none'}],{duration:700,easing:'cubic-bezier(.3,.7,.3,1)'}));break;
     case 'skip': later(own?520:700,()=>fx.ring(q('.card-center .playing-card'),{color:'#ff6a4d',scale:2,duration:600,width:4}));break;
     case 'uno': later(800,()=>fx.announce('UNO!',{tone:'red',sub:e.mine?'Ultima carta':next.players[e.seat]+' ha una carta',hold:1000}));break;
     case 'pass': fx.flash(q('.banner'),'fx-sweep',1200);break;
-    case 'start': fx.announce('Si gioca!',{tone:'gold',sub:next.game.id==='scopa'&&next.maxPlayers===4?'Scopone scientifico':catalog[id].name});break;
+    case 'start': if(!q('.card-table,.poker-felt'))fx.announce('Si gioca!',{tone:'gold',sub:catalog[id].name});break;
     case 'join': {
       const chip=q('.player[data-seat="'+e.seat+'"]')??q('[data-other="'+e.seat+'"]');
       fx.flash(chip,'fx-join',900);
@@ -699,9 +715,9 @@ function playEffects(list,prev,next,before) {
       break;
     }
     case 'result': later(landing+300,()=>{
-      if(e.outcome==='win'){fx.confetti();fx.announce(next.maxPlayers===4&&id==='scopa'?'Vittoria!':'Hai vinto!',{tone:'gold',sub:catalog[id].name,hold:2200});}
+      if(e.outcome==='win'){fx.confetti();fx.announce(isTeamRoom(next)?'Vittoria di squadra!':'Hai vinto!',{tone:'gold',sub:catalog[id].name,hold:2200});}
       else if(e.outcome==='draw')fx.announce('Pareggio',{tone:'teal',hold:1600});
-      else fx.announce('Sconfitta',{tone:'ash',sub:(id==='scopa'&&next.maxPlayers===4?'Squadra '+(g.result+1):next.players[g.result]??'Avversario')+' vince',hold:1800});
+      else fx.announce('Sconfitta',{tone:'ash',sub:(isTeamRoom(next)?'Squadra '+(g.result+1):next.players[g.result]??'Avversario')+' vince',hold:1800});
     });break;
     case 'your-turn': later(landing,()=>{fx.flash(q('.banner'),'fx-sweep',1200);fx.ring(q('.player.current .avatar')??q('.hand-seat[aria-current=true] .mini-hand'),{scale:2,duration:700});});break;
   }
@@ -754,7 +770,7 @@ function cardFace(id,value) {
 function playingCard(id,value,attribute='',enabled=false,selected=false) {
   const {label,style}=cardFace(id,value);
   const artwork=deckCache.get(id==='uno'?'uno':scopaDeck)?.[cardKey(id,value)];
-  const body=artwork?(typeof artwork==='string'?'<img alt="" draggable="false" src="data:image/webp;base64,'+artwork+'">':cardSvg(artwork)):'';
+  const body=artwork?(typeof artwork==='string'?'<img alt="" draggable="false" src="data:image/webp;base64,'+artwork+'">':cardSvg(artwork)):'<span class="card-text">'+escape(label)+'</span>';
   const cls='playing-card '+style;
   if(!attribute)return '<span class="'+cls+'" role="img" aria-label="'+label+'" data-card="'+escape(value)+'">'+body+'</span>';
   return '<button class="'+cls+'" '+attribute+' aria-label="'+label+'" '+(id==='scopa'?'aria-pressed="'+selected+'"':'')+' '+(enabled?'':'disabled')+'>'+body+'</button>';
@@ -763,11 +779,13 @@ const loadingDecks=new Set();
 function ensureDeck(deck) {
   if(deckCache.has(deck)||loadingDecks.has(deck))return;
   loadingDecks.add(deck);
-  loadDeck(deck).then(cards=>{
+  loadDeck(deck).catch(()=>{
+    toast('Le immagini del mazzo sono indisponibili. Puoi giocare con i nomi delle carte.');
+    return {};
+  }).then(cards=>{
     deckCache.set(deck,cards);
-    if(game()?.id==='uno'?deck==='uno':game()?.id==='scopa'&&deck===scopaDeck)render();
-  }).catch(()=>{toast('Impossibile caricare il mazzo. Ricarica la pagina per riprovare.');})
-    .finally(()=>loadingDecks.delete(deck));
+    if(game()?.id==='uno'?deck==='uno':['scopa','briscola'].includes(game()?.id)&&deck===scopaDeck)render();
+  }).finally(()=>loadingDecks.delete(deck));
 }
 app.addEventListener('change',event=>{
   const {id,value}=event.target;
@@ -778,14 +796,15 @@ app.addEventListener('change',event=>{
 });
 function opponentHand(g) {
   const capacity=state.maxPlayers??2;
+  const waiting=state.players.length<capacity;
   const seats=Array.from({length:capacity},(_,seat)=>{
     const occupied=seat<state.players.length;
     const own=seat===state.side;
     const count=g.handCounts?.[seat]??(own?g.hand.length:g.opponentCount);
     const current=seatHasTurn(state,seat);
     const title=occupied?displayNickname(state.players[seat],state.playerMarkup?.[seat]):'Posto '+(seat+1);
-    const details=occupied?(count===1?'1 carta':count+' carte')+(count===1&&g.id==='uno'?' <b class="uno-call">UNO!</b>':''):'Libero';
-    const team=capacity===4&&g.id==='scopa'?' · Squadra '+(seat%2+1):'';
+    const details=!occupied?'Libero':waiting?'In attesa della distribuzione':(count===1?'1 carta':count+' carte')+(count===1&&g.id==='uno'?' <b class="uno-call">UNO!</b>':'');
+    const team=isTeamRoom(state)?' · Squadra '+(seat%2+1):'';
     const backs='<span class="mini-hand" aria-hidden="true">'+('<i class="pile-back '+g.id+'"></i>').repeat(occupied?Math.min(3,count):3)+'</span>';
     return '<li class="hand-seat'+(occupied?'':' seat-vacant')+'" data-other="'+seat+'"'+(current?' aria-current="true"':'')+'>'+backs+
       '<span class="hand-seat-info"><strong>'+title+(own?' (tu)':'')+'</strong><small>'+details+team+'</small>'+
@@ -795,6 +814,7 @@ function opponentHand(g) {
 }
 function playHand(value) {
   if(!acting()||pending)return;
+  if(game().id==='briscola'){send({card:Number(value)});return;}
     if(game().id==='scopa') {
       selectedCard=Number(value);
       const options=game().takes[selectedCard];
@@ -811,7 +831,9 @@ function scopaFace(card) {
 }
 function cardPiles(g) {
   const pile=(label,count,attr)=>'<div class="table-pile" '+attr+'><i class="pile-back '+g.id+'" '+(count?'':'hidden')+'></i><span>'+label+' <b>'+count+'</b></span></div>';
-  const stock=pile('Da pescare',g.remaining,'data-stock');
+  const waiting=state.players.length<(state.maxPlayers??2);
+  const count=waiting&&!g.awaitingDeal?g.remaining+(g.table?.length??1)+(g.handCounts??[g.hand.length,g.opponentCount]).reduce((a,b)=>a+b,0):g.remaining;
+  const stock=pile(waiting?'Mazzo iniziale':'Da pescare',count,'data-stock');
   const piles=g.id==='scopa'&&g.captureCounts?[state.side%2,1-state.side%2].map(team=>{
     const label=team!==state.side%2?'Prese avversarie':state.maxPlayers===4?'Prese della squadra':'Le tue prese';
     const cards=g.captured?.[team]??[], sweeps=g.sweepCards?.[team]??[];
@@ -823,58 +845,99 @@ function cardPiles(g) {
   }).join(''):'';
   return '<div class="table-piles">'+stock+piles+'</div>';
 }
-function cardSnapshot(id) {
-  if(!['scopa','uno'].includes(id)||!fx.lively()||document.hidden)return null;
-  const map=selector=>new Map(Array.from(app.querySelectorAll(selector),el=>[el.dataset.card??el.dataset.hand,el.getBoundingClientRect()]));
-  return {faces:map('.card-center [data-card]'),hand:map('.hand [data-hand]'),own:app.querySelector('.hand')?.getBoundingClientRect()};
+function cardFlightScope() {
+  return state&&tab==='play'&&connected?[code,state.version,scopaDeck,cardHints,chatOpen].join('/'):'';
 }
-function animateCards(prev,next,origins) {
-  const g=next.game;
-  if(!origins||next.players.length!==(next.maxPlayers??2)||!app.querySelector('[data-stock]'))return;
-  const old=prev?.game, opening=(!prev&&!g.last)||!!prev&&prev.players.length<(next.maxPlayers??2);
-  if(!opening&&(!prev||next.version!==prev.version+1))return;
+function cardSnapshot() {
+  if(!fx.lively()||document.hidden||tab!=='play')return null;
+  const map=selector=>new Map(Array.from(app.querySelectorAll(selector),el=>[el.dataset.card??el.dataset.hand,el.getBoundingClientRect()]));
+  return {faces:map('.card-center [data-card]'),hand:map('.hand [data-hand]'),
+    stock:app.querySelector('[data-stock] .playing-card,[data-stock] .pile-back')?.getBoundingClientRect()};
+}
+function animateCards(next,transition,origins) {
+  const table=app.querySelector('.card-table'), g=next.game, scope=cardFlightScope();
+  if(!scope||!table)return;
+  const find=selector=>table.querySelector(selector);
   const box=el=>el?.getBoundingClientRect();
-  const sample=box(app.querySelector('.hand .playing-card'))??box(app.querySelector('.card-center .playing-card'));
-  const sized=(r,scale=1)=>r?.width&&sample?{left:r.left+r.width/2-sample.width*scale/2,top:r.top+r.height/2-sample.height*scale/2,width:sample.width*scale,height:sample.height*scale}:r;
-  const seat=side=>side===next.side?box(app.querySelector('.hand')):box(app.querySelector('[data-other="'+side+'"] .mini-hand'));
-  const stockCard=box(app.querySelector('[data-stock] .pile-back'));
-  const stock=stockCard?.width?stockCard:box(app.querySelector('[data-stock]'));
+  let sample=box(find('.hand .playing-card,.card-center .playing-card'))??origins.hand.values().next().value??origins.faces.values().next().value;
+  if(!sample?.width) {
+    const probe=document.createElement('span');
+    probe.className='playing-card';
+    find('.table-main').append(probe);
+    sample=box(probe);
+    probe.remove();
+  }
+  const sized=(r,scale=1)=>r?.width&&sample?{left:r.left+(r.width-sample.width*scale)/2,top:r.top+(r.height-sample.height*scale)/2,width:sample.width*scale,height:sample.height*scale}:r;
+  const stockFace=box(find('[data-stock] .pile-back,[data-stock] .playing-card'));
+  const stock=origins.stock?.width?origins.stock:stockFace?.width?stockFace:sized(box(find('[data-stock]')),.45);
+  const center=sized(box(find('.card-center .card-line')));
+  const seat=side=>'[data-other="'+side+'"] .mini-hand';
+  const centerCard=card=>'.card-center [data-card="'+CSS.escape(String(card))+'"]';
   const back='<i class="pile-back '+g.id+'"></i>';
-  const center=sized(box(app.querySelector('.card-center .card-line')));
-  const last=g.last;
-  const changed=!opening&&last&&JSON.stringify(last)!==JSON.stringify(old?.last);
-  const played=changed&&(g.id==='scopa'||last.type==='play');
-  const mine=played&&last.side===next.side;
+  const fly=(card,options,selectors=[])=>fx.flight({scope,back,face:card===null?back:playingCard(g.id,card),...options,
+    arrival:()=>selectors.map(selector=>{
+      const el=app.querySelector(selector);
+      return el?.closest('.caption-card')??el;
+    })});
+  const {played,draws}=transition;
   let wait=0;
-  if(played&&!(mine&&draggedMove)) {
-    const landing=app.querySelector('.card-center [data-card="'+CSS.escape(String(last.card))+'"]');
-    const from=mine?(origins.hand.get(String(last.card))??origins.own):sized(seat(last.side),.5);
-    fx.flight({face:playingCard(g.id,last.card),back,from,to:box(landing)??center,flip:!mine,hide:landing,duration:mine?520:700});
-    wait=mine?420:620;
-  }
-  if(g.id==='scopa'&&played&&last.take?.length) {
-    const pile=app.querySelector('[data-pile="'+(last.side%2)+'"] .capture-art');
-    const dest=sized(box(pile),.42);
-    [last.card,...last.take].forEach((card,i)=>fx.flight({face:playingCard('scopa',card),from:origins.faces.get(String(card))??center,to:dest,delay:wait+i*90,duration:560,shrink:true}));
-    wait+=420+last.take.length*90;
-    setTimeout(()=>fx.sparkle(pile,fx.palettes.oro,8),wait);
-  }
-  const counts=game=>game.handCounts??(next.side===0?[game.hand.length,game.opponentCount]:[game.opponentCount,game.hand.length]);
-  const now=counts(g), before=opening?now.map(()=>0):counts(old);
-  const previousHand=new Set((old?.hand??[]).map(String));
-  const newRound=g.id==='scopa'&&old&&old.round!==g.round;
-  let order=0;
-  now.forEach((n,side)=>{
-    const dealt=newRound?n:n-before[side]+Number(played&&last.side===side);
-    if(dealt<=0)return;
-    if(side===next.side) {
-      const fresh=Array.from(app.querySelectorAll('.hand [data-hand]')).filter(el=>opening||newRound||!previousHand.has(el.dataset.hand)).slice(-dealt);
-      for(const el of fresh) {
-        const value=g.hand.find(c=>String(c)===el.dataset.hand);
-        fx.flight({face:playingCard(g.id,value),back,from:stock,to:box(el),flip:true,hide:el,delay:wait+(order++)*110,duration:620});
+  if(played) {
+    const captured=g.id==='scopa'&&(played.take.length||played.clear||transition.newRound);
+    const landing=captured?null:find(centerCard(played.card));
+    const mine=played.side===next.side;
+    if(!mine||!draggedMove) {
+      const from=mine?origins.hand.get(String(played.card)):sized(box(find(seat(played.side))),.45);
+      wait=mine?390:500;
+      fly(played.card,{from,to:box(landing)??center,flip:!mine,duration:wait},landing?[centerCard(played.card)]:[]);
+    }
+    if(g.id==='scopa') {
+      const gathers=[];
+      if(played.take.length)gathers.push({team:played.side%2,cards:[played.card,...played.take]});
+      if(played.clear)gathers.push(played.clear);
+      for(const {team,cards} of gathers) {
+        const pile='[data-pile="'+team+'"]', dest=sized(box(find(pile+' .capture-art')),.45);
+        cards.forEach((card,i)=>{
+          const held=card!==played.card;
+          fly(card,{from:held?origins.faces.get(String(card)):center,to:dest,hold:held,shrink:true,
+            delay:wait+i*45,duration:380},[pile+' .capture-art [data-card="'+card+'"]']);
+        });
+        wait+=380+(cards.length-1)*45;
       }
-    } else for(let i=0;i<Math.min(dealt,5);i++) fx.flight({face:back,from:stock,to:sized(seat(side),.4),delay:wait+(order++)*90,duration:520,shrink:true});
-  });
+    }
+  }
+
+  // Reserve all landing places synchronously, including cards late in the deal.
+  // The visible fan at a seat represents at most three backs.
+  const dealCount=draws.reduce((n,count)=>n+count,transition.table.length);
+  const stagger=Math.min(85,Math.floor(1250/Math.max(1,dealCount)));
+  let order=0;
+  const deal=(card,to,flip,selectors)=>fly(card,{from:stock,to,flip,delay:wait+order++*stagger,duration:430},selectors);
+  for(const card of transition.table) {
+    const selector=centerCard(card);
+    deal(card,box(find(selector)),true,[selector]);
+  }
+  const count=draws.length;
+  const first=g.id==='briscola'&&played?(g.previousTrick?.winner??0):0;
+  for(let i=0;i<Math.max(...draws);i++) {
+    for(let offset=0;offset<count;offset++) {
+      const side=(first+offset)%count;
+      if(i>=draws[side])continue;
+      const endCount=g.handCounts?.[side]??(side===next.side?g.hand.length:g.opponentCount);
+      const index=endCount-draws[side]+i+1;
+      const mini=seat(side)+' .pile-back:nth-child('+index+')';
+      const masks=index<=3?[mini]:[];
+      if(side===next.side) {
+        const card=transition.hand[i];
+        if(card===undefined)continue;
+        const selector='.hand [data-hand="'+CSS.escape(String(card))+'"]';
+        deal(card,box(find(selector)),true,[selector,...masks]);
+      } else {
+        const to=box(find(mini))??sized(box(find(seat(side))),.32);
+        const publicTrump=g.id==='briscola'&&played&&!g.remaining&&stock&&side===(first+count-1)%count;
+        deal(publicTrump?g.trumpCard:null,to,false,masks);
+      }
+    }
+  }
 }
 
 function cardCaption(face,label,style='') {
@@ -886,17 +949,21 @@ function cardTable(g) {
   if(!ready)ensureDeck(deckId);
   const active=ready&&acting();
   const options=scopa?g.takes[selectedCard]??[]:[];
-  const table=scopa?'<div class="card-line">'+g.table.map(c=>scopaFace(c)).join('')+'</div>':
+  const table=g.awaitingDeal?'<div class="card-line"></div>':scopa?'<div class="card-line">'+g.table.map(c=>scopaFace(c)).join('')+'</div>':
     '<div class="card-line">'+(cardHints?cardCaption(playingCard(g.id,g.top),unoColors[g.color]):playingCard(g.id,g.top)+(g.top.startsWith('W:')?'<i class="wild-color uno-active uno-'+g.color+'" aria-label="'+unoColors[g.color]+'"></i>':''))+'</div>';
   const mine=state.side%2, theirs=1-mine;
-  const info=scopa?'Smazzata '+g.round+' · Punti '+g.scores[mine]+'–'+g.scores[theirs]+(g.points?' · ultima smazzata +'+g.points[mine]+' / +'+g.points[theirs]:''):
+  const us=state.maxPlayers===4?'Noi':'Tu', them=state.maxPlayers===4?'Loro':'Avversario';
+  const info=scopa?'Punti partita · '+us+' '+g.scores[mine]+' · '+them+' '+g.scores[theirs]+' · Traguardo 11'+(g.points?' · Mazzo '+(g.result===null?g.round-1:g.round)+' concluso: +'+g.points[mine]+' / +'+g.points[theirs]:''):
     (state.maxPlayers>2?(g.direction===-1?'↺ Giro antiorario':'↻ Giro orario'):'');
+  const progress=scopa?(g.awaitingDeal?{label:'In attesa della distribuzione'}:scopaProgress(g)):null;
+  const phase=scopa?'<div class="scopa-progress" role="status"><strong>Mazzo '+g.round+' · '+progress.label+'</strong><span>'+
+    (state.players.length<(state.maxPlayers??2)?'Si distribuisce quando tutti hanno preso posto.':progress.detail)+'</span></div>':'';
   const deck=scopa?'<label class="card-deck-picker">Mazzo <select id="scopa-deck">'+
     Object.entries(scopaDecks).map(([id,name])=>'<option value="'+id+'" '+(id===scopaDeck?'selected':'')+'>'+name+'</option>').join('')+'</select></label>':'';
-  const n=g.hand.length, squeeze=Math.max(0,Math.min(22,(n-6)*3));
+  const n=g.hand.length, squeeze=Math.max(0,Math.min(22,(n-6)*4));
   return '<div class="card-table table-'+g.id+'"'+(scopa?' data-deck="'+scopaDeck+'"':' data-color="'+escape(g.color)+'"')+'>'+'<div class="card-table-meta"><span>'+info+'</span><span class="table-tools">'+deck+'<button class="outline card-help" data-action="card-hints" title="Indicazioni di accessibilità" aria-label="Indicazioni di accessibilità" aria-pressed="'+cardHints+'">♿</button></span></div>'+(cardHints?'<small class="card-hint">Doppio clic o trascina sul tavolo. Da tastiera, premi Invio.</small>':'')+
-    '<div class="table-side">'+opponentHand(g)+cardPiles(g)+'</div><div class="table-main"><div class="card-center"><h3>'+(scopa?'Sul tavolo':'Carta in cima')+'</h3>'+table+'</div>'+
-    '<h3>La tua mano</h3><div class="card-line hand'+(n<=12?' fan':'')+'" style="--squeeze:'+squeeze+'px;--n-half:'+((n-1)/2).toFixed(1)+'">'+g.hand.map((c,i)=>{
+    '<div class="table-side">'+opponentHand(g)+cardPiles(g)+'</div><div class="table-main">'+phase+'<div class="card-center"><h3>'+(scopa?'Sul tavolo':'Carta in cima')+'</h3>'+table+'</div>'+
+    '<h3>La tua mano</h3><div class="card-line hand'+(n<=12?' fan':'')+(n>6?' long-hand':'')+'" style="--squeeze:'+squeeze+'px;--n-half:'+((n-1)/2).toFixed(1)+'">'+g.hand.map((c,i)=>{
       const vars='--i:'+i+';--o:'+(i-(n-1)/2).toFixed(2);
       const face=playingCard(g.id,c,'data-hand="'+c+'"'+(cardHints?'':' style="'+vars+'"'),active&&(scopa||g.playable.includes(c)),selectedCard===c);
       return cardHints?cardCaption(face,scopa?cardFace(g.id,c).label:unoColors[c[0]],vars):face;
@@ -998,6 +1065,21 @@ function movePanel(g) {
     Array.from(rows,([n,[white,black]])=>'<tr><th scope="row">'+n+'</th><td>'+escape(white??'—')+'</td><td>'+escape(black??'—')+'</td></tr>').join('')+
     '</tbody></table></div><button class="outline move-copy" type="button" data-action="copy-moves">'+icon('copy')+'Copia mosse</button>':empty+'<p class="move-empty">'+hint+'</p>')+'</section>';
 }
+function gameTable(g) {
+  if(g.id==='briscola') {
+    ensureDeck(scopaDeck);
+    return renderBriscola(g,{...state,deck:scopaDeck,cardHints,active:acting()&&deckCache.has(scopaDeck),playingCard,opponentHand});
+  }
+  if(g.id==='texas-holdem'||g.id==='poker-italiano') {
+    const key=[code,g.round,g.phase,g.turn,g.bets.join('-')].join('/');
+    if(pokerDraftKey!==key) {discards.clear();raiseTo=null;pokerDraftKey=key;}
+    return pokerTable(state,{active:acting(),escape,selected:discards,raiseTo});
+  }
+  if(g.id==='scopa'||g.id==='uno')return cardTable(g);
+  if(g.id==='naval')return naval(g);
+  if(['go','dots','nim','backgammon'].includes(g.id))return strategyBoard(g);
+  return checker(g);
+}
 function room() {
   const s=state,g=s.game,meta=catalog[g.id], [tone,wording]=banner(s);
   const hasMoveHistory=g.id==='chess'||g.id==='dama';
@@ -1023,12 +1105,12 @@ function room() {
     (!s.closed&&g.result===null&&s.closeRequest==null?'<button class="link close-game" data-action="close-game" aria-label="Chiudi partita" title="Chiudi partita" '+disabled+'>'+icon('close')+'<span>Chiudi partita</span></button>':'')+'</div></div></div>'+
     closure+'<div class="room-layout'+(dock?' has-dock':'')+(tab==='play'&&seatHasTurn(s,s.side)&&!pending?' your-turn':'')+'">'+
     '<div id="tabpanel" role="tabpanel" aria-labelledby="tab-'+tab+'">'+(tab==='rules'?rules(g.id,tabChanged):
-    '<div class="match">'+'<div class="banner '+tone+'" role="status"><i></i>'+escape(wording)+'</div>'+(['scopa','uno'].includes(g.id)?'':'<div class="players">'+Array.from({length:capacity},(_,i)=>{
+    '<div class="match">'+'<div class="banner '+tone+'" role="status"><i></i>'+escape(wording)+'</div>'+(gameType(g.id)==='cards'?'':'<div class="players">'+Array.from({length:capacity},(_,i)=>{
       const seated=i<s.players.length;
       return '<div class="player'+(seatHasTurn(s,i)?' current':'')+(seated?'':' vacant')+'" data-seat="'+i+'"><span class="avatar seat-'+i+'" aria-hidden="true">'+(seated?initial(s.players[i],s.playerMarkup?.[i]):'+')+'</span><span><strong title="'+escape(s.players[i]??'Posto libero')+'">'+displayNickname(s.players[i]??'Posto libero',s.playerMarkup?.[i])+(i===s.side?' (tu)':'')+'</strong><small>'+(s.maxPlayers>2?(g.id==='scopa'?'Squadra '+(i%2+1):'Posto '+(i+1)):meta.players[i])+'</small></span>'+(seated?chipStat(s,i):'')+'</div>';
     }).join('')+'</div>')+
     pass+turnNotes(s,acting()).map(note=>'<p class="subnote turn-note" role="status">'+escape(note)+'</p>').join('')+
-    (g.id==='naval'?naval(g):['scopa','uno'].includes(g.id)?cardTable(g):['go','dots','nim','backgammon'].includes(g.id)?strategyBoard(g):checker(g))+
+    gameTable(g)+
     '<div class="match-actions">'+(g.canDraw&&acting()?'<button class="outline" data-action="draw">'+icon('draw')+'Richiedi patta</button>':'')+
     (pending&&!busy?'<button class="primary" data-action="retry">'+icon('redo')+'Recupera mossa</button>':'')+
     (prefix.length?'<button class="link" data-action="cancel">Annulla selezione</button>':'')+
@@ -1052,7 +1134,7 @@ function render() {
   const deckFocused=focused?.id==='scopa-deck'?'scopa-deck':null;
   const chatFocused=focused?.id==='chat-input', cursor=chatFocused?focused.selectionStart:null;
   const richFocused=focused?.id==='chat-input-rich', richAt=richFocused?rich.getOffsets(focused):null;
-  const focusData=focused?.closest('#app')&&Object.entries(focused.dataset).find(([key])=>['tab','cell','action','naval'].includes(key));
+  const focusData=focused?.closest('#app')&&Object.entries(focused.dataset).find(([key])=>['tab','cell','action','naval','discard','poker','hand'].includes(key));
   const entry=restoring?'<section class="entry"><h1>Caricamento partita…</h1></section>':
     expired?'<section class="entry"><h1>Stanza non disponibile</h1><p>La partita potrebbe essere scaduta o il server locale potrebbe essere stato riavviato.</p><a class="primary" href="/">Torna alla Home</a></section>':
     restoreError?'<section class="entry"><h1>Connessione interrotta</h1><p>'+restoreError+'</p><button class="primary" data-action="restore">Riprova</button></section>':
@@ -1060,6 +1142,8 @@ function render() {
   app.classList.toggle('arrive',Boolean(state)&&paintedRoom!==code&&fx.lively());
   if(state)paintedRoom=code;
   app.innerHTML=state?room():code?entry:lobby();
+  app.classList.toggle('awaiting-players',!!state&&state.players.length<(state.maxPlayers??2));
+  fx.syncCardFlights(cardFlightScope());
   updateTitle();
   
   if(!state&&!code)filterCatalog();
@@ -1425,6 +1509,17 @@ app.addEventListener('click',async e=>{
   if(ignoreClick)return;
   const b=e.target.closest('button');if(!b)return;
   const d=b.dataset;
+  if(d.discard&&acting()&&game().legal?.draw) {
+    if(discards.has(d.discard))discards.delete(d.discard);
+    else if(discards.size<game().legal.draw)discards.add(d.discard);
+    else {toast('Puoi cambiare fino a '+game().legal.draw+' carte.');return;}
+    render();
+    return;
+  }
+  if(d.poker&&acting()) {
+    send(d.poker==='draw'?{type:'draw',cards:[...discards]}:{type:d.poker});
+    return;
+  }
   if(d.filter){gameFilter=d.filter;filterCatalog();return;}
   if(d.closeRoom){closeFromDashboard(d.closeRoom);return;}
   if(d.dismiss) {
@@ -1663,7 +1758,15 @@ document.addEventListener('paste',e=>{
 });
 document.addEventListener('drop',e=>{if(e.target.closest?.('.rich-input'))e.preventDefault();});
 let chatSending=false;
+app.addEventListener('input',event=>{
+  if(event.target.id==='raise-to')raiseTo=Number.isSafeInteger(event.target.valueAsNumber)?event.target.valueAsNumber:null;
+});
 app.addEventListener('submit',async e=>{
+  if(e.target.matches('.poker-raise')) {
+    e.preventDefault();
+    if(acting()&&e.target.reportValidity())send({type:'raise',to:e.target.querySelector('input').valueAsNumber});
+    return;
+  }
   if(e.target.id!=='chat-form')return;
   e.preventDefault();
   const text=chatDraft.trim();

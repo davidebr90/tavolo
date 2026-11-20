@@ -1,4 +1,4 @@
-function shuffle(cards) {
+export function shuffle(cards) {
   const random=new Uint32Array(cards.length);
   crypto.getRandomValues(random);
   for(let i=cards.length-1;i>0;i--) {
@@ -77,7 +77,11 @@ function scopaPlay(state,action) {
   s.turn=(turn+1)%s.hands.length;
   if(s.hands.every(h=>!h.length)&&s.deck.length) s.hands=[s.deck.splice(0,3),s.deck.splice(0,3)];
   if(!final) return s;
-  if(s.lastCapture!==null) s.captured[s.lastCapture].push(...s.table.splice(0));
+  if(s.lastCapture!==null&&s.table.length) {
+    const cards=s.table.splice(0);
+    s.last.clear={cards,team:s.lastCapture};
+    s.captured[s.lastCapture].push(...cards);
+  }
   s.points=scoreScopa(s);
   s.scores=s.scores.map((n,i)=>n+s.points[i]);
   if(Math.max(...s.scores)>=11&&s.scores[0]!==s.scores[1]) {

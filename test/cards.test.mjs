@@ -12,6 +12,20 @@ test('Scopa prioritizes a matching card over a sum and hides the opponent hand',
   assert.equal(view(s,0).opponentCount,1);
   assert.equal('hands' in view(s,0),false);
 });
+test('Scopa attributes the loose table cards to the last taker after the final discard',()=>{
+  const s=start('scopa'), loose=[0,1], final=9;
+  s.table=loose.slice();
+  s.hands=[[],[final]];
+  s.deck=[];
+  s.turn=1;
+  s.lastCapture=0;
+  s.captured=[Array.from({length:40},(_,i)=>i).filter(c=>c!==final&&!loose.includes(c)),[]];
+  s.scores=[10,0];
+  const end=play(s,{card:final,take:[]});
+  assert.equal(end.result,0);
+  assert.equal(end.captured[0].length,40);
+  assert.deepEqual(view(end,1).last.clear,{team:0,cards:[...loose,final]});
+});
 test('UNO validates +4, hides hands, and applies the two-player reverse', () => {
   const s=start('uno');
   s.hands=[['R:reverse:0','R:5:0','W:four:0'],['B:2:0']];

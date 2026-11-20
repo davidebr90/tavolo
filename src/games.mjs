@@ -1,9 +1,11 @@
 import { chessStart, chessMoves, chessPlay, checked, canClaimDraw } from './chess.mjs';
 import { startCards, playCards, viewCards } from './cards.mjs';
+import { startBriscola, playBriscola, viewBriscola } from './briscola.mjs';
+import { pokerIds, startPoker, playPoker, viewPoker } from './poker.mjs';
 import { strategyIds, strategyStart, strategyPlay, strategyView } from './strategy.mjs';
 
 const cards=['scopa','uno'];
-export const games=['chess','naval','four','reversi','tris','dama',...cards,...strategyIds];
+export const games=['chess','naval','four','reversi','tris','dama',...cards,'briscola',...pokerIds,...strategyIds];
 const grid=(n)=>Array(n).fill(0);
 const adjacent=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
 const diagonals=adjacent.filter(([r,c])=>r&&c);
@@ -36,6 +38,8 @@ export function start(id,options={}) {
   if(!games.includes(id)) throw new Error('Gioco non disponibile.');
   if(id==='chess') return chessStart();
   if(cards.includes(id)) return startCards(id,options);
+  if(id==='briscola') return startBriscola(options);
+  if(pokerIds.includes(id)) return startPoker(id,options);
   if(strategyIds.includes(id)) return strategyStart(id);
   const s={id,turn:0,result:null,last:null};
   if(id==='naval') {
@@ -134,6 +138,8 @@ export function play(s,action,side=s.turn) {
   if(side!==s.turn) throw new Error('Aspetta il tuo turno.');
   if(s.id==='chess') return chessPlay(s,action);
   if(cards.includes(s.id)) return playCards(s,action);
+  if(s.id==='briscola') return playBriscola(s,action,side);
+  if(pokerIds.includes(s.id)) return playPoker(s,action);
   if(strategyIds.includes(s.id)) return strategyPlay(s,action);
   const board=s.board.slice(), p=side+1;
   const next={...s,board,turn:1-side};
@@ -185,6 +191,8 @@ export function play(s,action,side=s.turn) {
 }
 export function view(s,side) {
   if(cards.includes(s.id)) return viewCards(s,side);
+  if(s.id==='briscola') return viewBriscola(s,side);
+  if(pokerIds.includes(s.id)) return viewPoker(s,side);
   if(strategyIds.includes(s.id)) return strategyView(s,side);
   const {id,turn,result,last,board}=s;
   if(id==='naval') return {id,turn,result,last,size:s.size??10,lengths:s.lengths??lengths,ready:s.fleets.map(Boolean),mine:s.fleets[side],incoming:s.shots[1-side],outgoing:s.shots[side]};

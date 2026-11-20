@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {create,join,submit,snapshot} from '../src/room.mjs';
 import {fleet} from '../src/games.mjs';
-import {moveEffects,seatHasTurn,kingSquare} from '../public/effects.mjs';
+import {moveEffects,seatHasTurn,kingSquare,cardTransition,scopaProgress} from '../public/effects.mjs';
 
 const A='a'.repeat(32), B='b'.repeat(32);
 let counter=0;
@@ -115,4 +115,93 @@ test('Older or identical snapshots never replay effects',()=>{
   assert.deepEqual(moveEffects(after,before),[]);
   assert.deepEqual(moveEffects(after,after),[]);
   assert.deepEqual(moveEffects(null,after),[]);
+});
+
+test('Card openings reserve all table and hand cards once, never on resume or a missed version',()=>{
+  for(const [id,players] of [['scopa',2],['scopa',4],['uno',10],['briscola',4]]) {
+    const room=create(id,'Ada',A,{players});
+    let waiting;
+    for(let n=1;n<players;n++) {
+      waiting=snapshot(room,A);
+      join(room,'Player '+n,String(n));
+    }
+    const start=snapshot(room,A), g=start.game;
+    const open=cardTransition(waiting,start);
+    assert.deepEqual(open.hand,g.hand);
+    assert.deepEqual(open.draws,g.handCounts);
+    assert.deepEqual(open.table,id==='scopa'?g.table:id==='uno'?[g.top]:[]);
+    assert.equal(open.played,null);
+    assert.deepEqual(cardTransition(null,start,true),open);
+    assert.equal(cardTransition(null,start),null);
+    assert.equal(cardTransition(start,start),null);
+    assert.equal(cardTransition(waiting,{...start,version:start.version+1}),null);
+  }
+});
+
+test('Scopa keeps cards on the table on a refill and redeals all four on a new pack',()=>{
+  const room=table('scopa');
+  const hands=new Set();
+  for(let i=0;i<36;i++) {
+    const token=room.game.turn===0?A:B;
+    const g=snapshot(room,token).game;
+    hands.add(scopaProgress(g).label);
+    const played=g.hand[0], take=g.takes[played][0];
+    const [before,after]=move(room,token,{card:played,take},A);
+    const changes=cardTransition(before,after);
+    assert.equal(changes.played.card,played);
+    if(i===29) {
+      assert.equal(after.game.remaining,0);
+      assert.match(scopaProgress(after.game).detail,/Ultima mano · 6 giocate rimaste/);
+    }
+    if(i===34)assert.match(scopaProgress(after.game).detail,/1 giocata rimasta/);
+    if(after.game.round!==before.game.round) {
+      assert.equal(i,35);
+      assert.deepEqual(changes.table,after.game.table);
+      assert.deepEqual(changes.hand,after.game.hand);
+      assert.deepEqual(changes.draws,[3,3]);
+      assert.equal(changes.newRound,true);
+    } else {
+      assert.deepEqual(changes.table,[]);
+      if(i<35&&(i+1)%6===0)assert.deepEqual(changes.draws,[3,3]);
+      else assert.deepEqual(changes.draws,[0,0]);
+    }
+  }
+  assert.equal(hands.size,6);
+});
+
+test('Scopone deals the complete new pack after 40 plays with no stock or opening table',()=>{
+  const room=create('scopa','Ada',A,{players:4}), tokens=[A,B,'c','d'];
+  for(let i=1;i<4;i++)join(room,'Player '+i,tokens[i]);
+  const start=snapshot(room,A).game;
+  assert.equal(scopaProgress(start).label,'Distribuzione unica');
+  assert.match(scopaProgress(start).detail,/40 giocate rimaste/);
+  // Play through a complete pack that ends below the 11-point target.
+  room.game.hands=[[0,23,29,10,2,13,20,7,38,26],[33,25,15,14,28,30,22,27,6,21],
+    [18,3,34,35,39,5,31,4,9,12],[24,17,11,19,32,1,16,36,37,8]];
+  let pair;
+  for(let i=0;i<40;i++) {
+    const token=tokens[room.game.turn], g=snapshot(room,token).game, card=g.hand[0];
+    pair=move(room,token,{card,take:g.takes[card][0]},A);
+    if(i<39)assert.deepEqual(cardTransition(...pair).draws,[0,0,0,0]);
+  }
+  const event=cardTransition(...pair);
+  assert.equal(event.newRound,true);
+  assert.equal(pair[0].game.remaining,0);
+  assert.equal(pair[1].game.remaining,0);
+  assert.deepEqual(event.table,[]);
+  assert.deepEqual(event.draws,[10,10,10,10]);
+  assert.deepEqual(event.hand,pair[1].game.hand);
+});
+
+test('UNO repeated draw snapshots can add a card even when the last action text is identical',()=>{
+  const room=table('uno'), initial=snapshot(room,A), last={type:'draw',side:0};
+  const before={...initial,game:{...initial.game,last}};
+  const card=room.game.deck.at(-1);
+  const after={...initial,version:initial.version+1,game:{...initial.game,last,
+    hand:[...initial.game.hand,card],handCounts:[8,7]}};
+  const event=cardTransition(before,after);
+  assert.deepEqual(event.hand,[card]);
+  assert.deepEqual(event.draws,[1,0]);
+  assert.deepEqual(event.table,[]);
+  assert.equal(event.played,null);
 });
