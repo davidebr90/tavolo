@@ -8,14 +8,25 @@ export function savedSeats() {
   return rooms;
 }
 export const isTeamRoom=room=>room.maxPlayers===4&&['scopa','briscola'].includes(room.game.id);
+export const comparingMemory=game=>game.id==='memory'&&game.phase==='compare';
+export function tiedLeaders({game,players}) {
+  if(game.id==='memory'&&game.result==='draw'&&game.winners?.length<players.length)return game.winners;
+  return null;
+}
 
 export function roomStatus(state) {
   const {game,players,side}=state;
   if(state.closed) return {label:'Partita chiusa',tone:'done'};
+  const leaders=tiedLeaders(state);
+  if(leaders) {
+    const label=state.spectator?'Primi a pari merito':leaders.includes(side)?'Primo a pari merito':'Partita conclusa';
+    return {label,tone:'done'};
+  }
   if(game.result!==null) return {label:game.result==='draw'?'Pareggio':game.result===(isTeamRoom(state)?side%2:side)?'Hai vinto':'Partita conclusa',tone:'done'};
   if(state.closeRequest!=null) return state.closeRequest===side
     ? {label:'Chiusura in attesa',tone:'waiting'} : {label:'Rispondi alla chiusura',tone:'your'};
   if(players.length<(state.maxPlayers??2)) return {label:'In attesa',tone:'waiting'};
+  if(comparingMemory(game))return {label:'Confronto delle carte',tone:'waiting'};
   if(game.id==='naval'&&!game.ready.every(Boolean)) return game.ready[side]
     ? {label:'Attesa flotta',tone:'waiting'} : {label:'Schiera la flotta',tone:'your'};
   return game.turn===side?{label:'Tocca a te',tone:'your'}:{label:'Turno avversario',tone:'other'};

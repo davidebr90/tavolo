@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { randomBytes } from 'node:crypto';
+import { memoryFigures } from '../public/memory-figures.mjs';
 
 const random=n=>randomBytes(n).toString('hex');
 test('Local HTTP and realtime over TCP', {timeout:15000,skip:!process.env.TAVOLO_HTTP_TEST}, async t=>{
@@ -10,6 +11,16 @@ test('Local HTTP and realtime over TCP', {timeout:15000,skip:!process.env.TAVOLO
   t.after(()=>server.kill());
   const [out]=await once(server.stdout,'data');
   const base='http://127.0.0.1:'+out.toString().match(/porta (\d+)/)[1];
+  const artwork=await Promise.all(memoryFigures.map(async ({id})=>{
+    const response=await fetch(base+'/memory/'+id+'.webp');
+    assert.equal(response.status,200);
+    assert.equal(response.headers.get('content-type'),'image/webp');
+    const bytes=Buffer.from(await response.arrayBuffer());
+    assert.equal(bytes.toString('ascii',8,12),'WEBP');
+    return bytes.toString('base64');
+  }));
+  assert.equal(new Set(artwork).size,12);
+  assert.equal((await fetch(base+'/memory/catalog.mjs')).status,404);
   const headers=token=>({Authorization:'Bearer '+token,'Content-Type':'application/json'});
   async function call(code,token,path='',body) {
     const res=await fetch(base+'/api/rooms/'+code+path,{headers:headers(token),method:body?'POST':'GET',body:body?JSON.stringify(body):undefined});

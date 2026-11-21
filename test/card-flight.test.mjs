@@ -46,6 +46,21 @@ test('A card keeps its destination hidden across renders and reveals it exactly 
   syncCardFlights('room/2');
   assert.equal(hidden(),false);
   assert.equal(overlays.size,0);
+  // Overlapping chip/card flights can reserve the same pile. Re-rendering the
+  // room and finishing one flight must keep the other destination concealed.
+  flight(options);
+  flight(options);
+  const [first,last]=animations.slice(-2);
+  const old=destination;
+  destination=new Element();
+  syncCardFlights('room/1');
+  assert.equal(old.classList.values.has('awaiting-card'),false);
+  first.complete();
+  await Promise.resolve();
+  assert.ok(hidden());
+  last.complete();
+  await Promise.resolve();
+  assert.equal(hidden(),false);
   prefs.matches=true;
   flight(options);
   assert.equal(hidden(),false);

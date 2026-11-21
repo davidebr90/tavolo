@@ -35,16 +35,15 @@
 *,*::before,*::after{box-sizing:border-box}
 html{background:var(--night);scrollbar-color:var(--walnut-hi) transparent}
 body{margin:0;min-height:100dvh;color:var(--ink);font:16px/1.55 var(--text);-webkit-font-smoothing:antialiased;overflow-x:hidden;background:transparent}
-body::before{content:'';position:fixed;inset:-10%;z-index:-2;pointer-events:none;
+body::before{content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
   background:
     radial-gradient(70rem 42rem at 50% -14rem,rgb(255 210 130 / 17%),transparent 70%),
     radial-gradient(52rem 36rem at 105% 105%,rgb(24 110 84 / 30%),transparent 70%),
     radial-gradient(40rem 30rem at -5% 85%,rgb(150 52 30 / 20%),transparent 70%),
-    linear-gradient(180deg,#121a17,#0a0f0d 65%);
-  animation:lamp 16s ease-in-out infinite alternate}
-body::after{content:'';position:fixed;inset:-60%;z-index:-1;pointer-events:none;opacity:.06;
+    linear-gradient(180deg,#121a17,#0a0f0d 65%)}
+body::after{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.06;
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-  animation:grain 1s steps(5) infinite}
+}
 h1,h2,h3,p{margin:0}
 h1,h2,h3,.brand{font-family:var(--display);font-optical-sizing:auto}
 h1{font-weight:700;letter-spacing:-.015em;line-height:1.02}
@@ -168,6 +167,9 @@ input[type=checkbox]{width:17px;height:17px;accent-color:var(--brass)}
 /* Animated game vignettes */
 .scene{position:relative;width:132px;height:100px;display:grid;place-items:center}
 .scene *{position:absolute}
+.memory-scene img{width:77px;aspect-ratio:1;object-fit:cover;border:4px solid #f5ebd2;border-radius:7px;box-shadow:0 7px 11px #0005}
+.memory-scene img:first-child{transform:translate(-23px,-4px) rotate(-15deg)}
+.memory-scene img:last-child{transform:translate(23px,5px) rotate(11deg)}
 .chess-scene .board-patch{width:112px;height:112px;border-radius:6px;background:conic-gradient(#e8d3ab 25%,#9b6b43 0 50%,#e8d3ab 0 75%,#9b6b43 0) 0 0/28px 28px;transform:rotateX(58deg) rotateZ(45deg) translateY(30px);box-shadow:0 30px 30px -10px #000a}
 .chess-scene .knight{font:88px/1 'Segoe UI Symbol','DejaVu Sans',serif;color:#f6eedd;bottom:6px;left:24px;text-shadow:0 2px 0 #b9a27a,0 12px 14px #000a;transform-origin:50% 100%;animation:bob 3.6s ease-in-out infinite}
 .chess-scene .pawn{font:44px/1 'Segoe UI Symbol','DejaVu Sans',serif;color:#1d1612;bottom:12px;right:20px;text-shadow:0 1px 0 #6e5a48,0 8px 10px #000a}
@@ -334,7 +336,8 @@ input[type=checkbox]{width:17px;height:17px;accent-color:var(--brass)}
 .room-layout{position:relative;min-width:0;border-radius:26px;border:1px solid var(--line);
   background:radial-gradient(120% 70% at 50% -10%,rgb(255 220 150 / 9%),transparent 60%),linear-gradient(180deg,#17211d,#0f1613);
   box-shadow:var(--shadow-lg),inset 0 1px 0 rgb(255 255 255 / 5%);transition:box-shadow .6s,border-color .6s}
-.room-layout.your-turn{border-color:rgb(125 220 159 / 32%);animation:turn-aura 2.8s ease-in-out infinite alternate}
+.room-layout.your-turn{border-color:rgb(125 220 159 / 32%)}
+.room-layout.your-turn::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:0 0 0 1px rgb(125 220 159 / 40%),0 0 56px -16px rgb(125 220 159 / 48%);animation:turn-aura 2.8s ease-in-out infinite alternate}
 .room-layout>[role=tabpanel]{min-width:0}
 .room-layout>[role=tabpanel]>.rules{padding:clamp(14px,2vw,26px)}
 .room-layout.has-dock{display:grid;grid-template-columns:minmax(0,1fr) clamp(270px,23vw,36rem)}
@@ -583,7 +586,7 @@ input[type=checkbox]{width:17px;height:17px;accent-color:var(--brass)}
 .navy-setup.fleet-layout{grid-template-columns:minmax(86px,.65fr) minmax(160px,2fr) minmax(110px,.85fr);max-width:100%;gap:10px}
 .navy-grid{position:relative;display:grid;grid-template-columns:repeat(var(--sea-size,10),minmax(0,1fr));gap:1px;padding:1px;border-radius:8px;overflow:hidden;
   background:#071f33;box-shadow:0 0 0 1px rgb(120 200 255 / 25%),0 24px 50px -24px #000}
-.navy-grid::after{content:'';position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;opacity:.5;
+.navy-grid::after{content:'';position:absolute;inset:-8%;pointer-events:none;mix-blend-mode:screen;opacity:.5;
   background:radial-gradient(ellipse at 20% 30%,rgb(140 220 255 / 16%),transparent 40%),radial-gradient(ellipse at 70% 70%,rgb(140 220 255 / 12%),transparent 40%);background-size:200% 200%;animation:caustics 9s ease-in-out infinite alternate}
 .navy-grid .cell{position:relative;overflow:visible;background:radial-gradient(circle at 50% 40%,#1d5f88,#134669);font-size:clamp(.6rem,2.3vw,1.15rem);line-height:1;color:#bfe6ff}
 .navy-grid .hull{color:#0e1d2c}
@@ -1019,8 +1022,6 @@ dialog:has(.profile-dialog){width:min(600px,calc(100% - 28px));overflow:auto}
 html.holding-piece,html.holding-piece *{cursor:grabbing!important}
 
 /* Keyframes */
-@keyframes lamp{from{opacity:.85;transform:scale(1)}to{opacity:1;transform:scale(1.04)}}
-@keyframes grain{0%{transform:translate(0,0)}20%{transform:translate(-3%,2%)}40%{transform:translate(2%,-3%)}60%{transform:translate(-2%,-1%)}80%{transform:translate(3%,3%)}100%{transform:translate(0,0)}}
 @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 @keyframes fade-in{from{opacity:0}}
 @keyframes table-in{from{opacity:0;transform:translateY(26px) scale(.97);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}
@@ -1038,7 +1039,7 @@ html.holding-piece,html.holding-piece *{cursor:grabbing!important}
 @keyframes ping-go{0%{box-shadow:0 0 0 0 rgb(125 220 159 / 70%)}100%{box-shadow:0 0 0 10px rgb(125 220 159 / 0%)}}
 @keyframes ping-red{0%{box-shadow:0 0 0 0 rgb(236 91 63 / 70%)}100%{box-shadow:0 0 0 9px rgb(236 91 63 / 0%)}}
 @keyframes sweep{from{transform:translateX(-120%)}to{transform:translateX(120%)}}
-@keyframes turn-aura{from{box-shadow:var(--shadow-lg),0 0 0 1px rgb(125 220 159 / 18%),0 0 40px -18px rgb(125 220 159 / 40%)}to{box-shadow:var(--shadow-lg),0 0 0 1px rgb(125 220 159 / 40%),0 0 70px -14px rgb(125 220 159 / 55%)}}
+@keyframes turn-aura{from{opacity:.45}to{opacity:1}}
 @keyframes invite-glow{0%,100%{box-shadow:inset 0 1px 0 rgb(255 255 255 / 45%),0 8px 22px -10px rgb(217 179 102 / 70%)}50%{box-shadow:inset 0 1px 0 rgb(255 255 255 / 45%),0 8px 34px -6px rgb(217 179 102 / 95%)}}
 @keyframes join-pop{0%{transform:scale(.8);box-shadow:0 0 0 0 rgb(244 220 156 / 80%)}60%{transform:scale(1.05)}100%{transform:none;box-shadow:0 0 0 14px rgb(244 220 156 / 0%)}}
 @keyframes must-take{from{filter:brightness(1)}to{filter:brightness(1.25)}}
@@ -1058,7 +1059,7 @@ html.holding-piece,html.holding-piece *{cursor:grabbing!important}
 @keyframes edge-draw-v{from{transform:scaleY(0)}}
 @keyframes box-fill{from{opacity:0;transform:scale(.3)}to{opacity:1;transform:none}}
 @keyframes flame{from{transform:translateX(-50%) scale(1,1);opacity:.85}to{transform:translateX(-50%) scale(.9,1.12);opacity:1}}
-@keyframes caustics{from{background-position:0% 0%}to{background-position:100% 100%}}
+@keyframes caustics{from{transform:translate(-4%,-4%)}to{transform:translate(4%,4%)}}
 @keyframes waves{from{transform:translateX(0)}to{transform:translateX(-25%)}}
 @keyframes blip{0%,60%{opacity:0;transform:scale(.4)}70%{opacity:1;transform:scale(1.3)}100%{opacity:0;transform:scale(1)}}
 @keyframes knight-hop{0%{transform:none}35%{transform:translate(18px,-40px) rotate(14deg)}70%{transform:translate(36px,-6px) rotate(-6deg)}85%{transform:translate(36px,0) scale(1.06,.94)}100%{transform:translate(36px,0)}}

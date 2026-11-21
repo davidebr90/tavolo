@@ -1,11 +1,13 @@
 import { guides } from './guides.mjs';
+import { memoryTable, patchMemoryTable, memoryKeydown } from './memory-table.mjs';
+import { memoryFigures, warmMemoryFigures } from './memory-figures.mjs';
 import { catalog } from './catalog.mjs';
-import { savedSeats, roomStatus, roomTransport, watchRoom, chatEntries, unreadChat, lastChessMove, isTeamRoom } from './rooms.mjs';
+import { savedSeats, roomStatus, roomTransport, watchRoom, chatEntries, unreadChat, lastChessMove, isTeamRoom, tiedLeaders, comparingMemory } from './rooms.mjs';
 import { renderBriscola } from './briscola.mjs';
 import { pokerTable, isPoker, pokerBack, cardFace as frenchCard, chipColors } from './poker-table.mjs';
 import { icon } from './icons.mjs';
 import { parseChat, chatColors, renderChatMessage } from './chat-format.mjs';
-import { cardKey, cardSvg, loadDeck, scopaDecks } from './card-art.mjs';
+import { cardKey, deckImages, loadDeck, scopaDecks } from './card-art.mjs';
 import { moveEffects, seatHasTurn, kingSquare, cardTransition, scopaProgress } from './effects.mjs';
 import * as fx from './motion.mjs';
 import * as sound from './sound.mjs';
@@ -142,12 +144,14 @@ function accept(next,{joining=false,reconnect=false}={}) {
   const incoming=next.game.id==='naval'&&state?.game.id==='naval'&&next.game.incoming.length>state.game.incoming.length?next.game.incoming.at(-1):null;
   if(incoming)navalView='own-fleet';
   const previousRoom=state;
+  const consecutive=previousRoom&&next.version===previousRoom.version+1;
   const transition=reconnect?null:cardTransition(state,next,joining);
   const cardOrigins=transition?cardSnapshot():null;
   const pokerOrigins=!reconnect&&isPoker(next.game.id)&&(joining||state?.version===next.version-1)?pokerSnapshot():null;
   const boardOrigins=boardSnapshot(next.game.id);
   notifyClosure(state,next);
-  if(next.game.id==='uno'&&previousRoom?.game.id==='uno'&&previousRoom.game.top!==next.game.top)underTop=previousRoom.game.top;
+  if(reconnect||!consecutive)underTop=null;
+  else if(next.game.id==='uno'&&previousRoom.game.id==='uno'&&previousRoom.game.top!==next.game.top)underTop=previousRoom.game.top;
   if(previousRoom&&next.game.result!==null&&(next.rematch??[]).some(i=>i!==next.side&&!(previousRoom.rematch??[]).includes(i))&&!(next.rematch??[]).includes(next.side))
     toast(next.players[(next.rematch??[]).find(i=>i!==next.side)]+' vuole la rivincita.');
   if(previousRoom&&previousRoom.game.result!==null&&next.game.result===null)underTop=null;
@@ -155,12 +159,13 @@ function accept(next,{joining=false,reconnect=false}={}) {
   prefix=[];
   selectedCard=null;
   seenRooms.set(code,next);
-  fresh={version:next.version,at:performance.now(),prev:previousRoom?.game??null};
+  fresh={version:!reconnect&&consecutive?next.version:-1,at:performance.now(),prev:previousRoom?.game??null};
   render();
-  if(incoming)showStrike(incoming);
+  if(incoming&&!reconnect&&consecutive)showStrike(incoming);
+  cardTiming.landed=cardTiming.cleared=0;
   if(cardOrigins)animateCards(next,transition,cardOrigins);
   if(pokerOrigins)animatePoker(previousRoom,next,pokerOrigins);
-  if(!reconnect) {
+  if(!reconnect&&consecutive) {
     const effects=moveEffects(previousRoom,next);
     playSounds(effects,previousRoom,next,transition);
     playEffects(effects,previousRoom,next,boardOrigins);
@@ -392,6 +397,7 @@ const pips=value=>(pipLayout[value]??[]).map(n=>'<b style="grid-area:'+(Math.cei
 function art(id) {
   const scene=(name,body)=>'<div class="scene '+name.split(' ').map(part=>part+'-scene').join(' ')+'">'+body+'</div>';
   switch(id) {
+    case 'memory': return scene('memory','<img src="/memory/pulcinella.webp" alt="" decoding="async"><img src="/memory/fenicottero.webp" alt="" decoding="async">');
     case 'chess': return scene('chess','<i class="board-patch"></i><span class="knight">♞</span><span class="pawn">♟</span>');
     case 'naval': return scene('naval','<i class="wave"></i><i class="wave"></i><i class="hull"></i><i class="sonar"></i><i class="blip"></i>');
     case 'four': return '<div class="scene four-scene">'+('.....'+'...g.'+'.c.cg'+'cg.gc').split('').map(c=>'<i'+(c==='.'?'':' class="'+c+'"')+'></i>').join('')+'<b class="drop"></b></div>';
@@ -462,7 +468,7 @@ function paintRooms() {
     const capacity=s?.maxPlayers??2, free=s?Math.max(0,capacity-s.players.length):0;
     const active=s&&!s.closed&&s.game.result===null;
     const people=s?s.players.map((name,i)=>{
-      const turn=active&&free===0&&s.game.turn===i&&s.closeRequest==null&&(s.game.id!=='naval'||s.game.ready.every(Boolean));
+      const turn=s.closeRequest==null&&seatHasTurn(s,i);
       return '<li class="room-person">'+icon('profile')+displayNickname(name,s.playerMarkup?.[i])+(i===s.side?' <em>Tu</em>':'')+(turn?' <em>Di turno</em>':'')+'</li>';
     }).join(''):'';
     const seats=s?'<div class="room-seats"><span>Giocatori <b>'+s.players.length+' / '+capacity+'</b></span>'+
@@ -592,11 +598,14 @@ function banner(s) {
   const g=s.game;
   if(s.closed) return ['neutral','Partita chiusa'];
   const me=s.spectator?-1:s.side;
+  const leaders=tiedLeaders(s);
+  if(leaders)return ['neutral','Primi a pari merito · '+leaders.map(i=>s.players[i]).join(' e ')];
   if(Number.isInteger(g.result)&&isTeamRoom(s))return ['neutral','Ha vinto la squadra '+(g.result+1)];
   if(g.result!==null) return ['neutral',g.result==='draw'?'Partita pari':g.result===me?'Hai vinto!':s.players[g.result]+' ha vinto'];
   if(!connected) return ['neutral','Riconnessione…'];
   if(pending) return ['neutral',busy?(pending.action.close?'Chiusura in invio…':'Mossa in invio…'):'Conferma da recuperare'];
   if(s.players.length<(s.maxPlayers??2)) return ['neutral','In attesa · '+s.players.length+' di '+(s.maxPlayers??2)+' giocatori'];
+  if(comparingMemory(g))return ['neutral','Confronto delle carte'];
   if(g.id==='naval'&&!g.ready.every(Boolean)) return ['neutral',s.spectator?'Le flotte si stanno schierando':g.ready[s.side]?'In attesa della flotta avversaria':'Schiera la tua flotta'];
   // Between two poker hands the turn only says who deals the next one.
   if(isPoker(g.id)&&g.phase==='complete') return g.turn===me?['green','Mano conclusa · distribuisci la prossima']:['neutral','Mano conclusa · '+s.players[g.turn]+' distribuisce la prossima'];
@@ -759,7 +768,7 @@ function playEffects(list,prev,next,before) {
   const at=i=>q('[data-cell="'+i+'"]')??q('[data-go="'+i+'"]')??q('[data-bg="'+i+'"]');
   const rect=el=>el?.getBoundingClientRect?.();
   const board=q('.board,.bg-board,.dots-board,.nim-board,.table-ring,.navy-battle');
-  const later=(ms,run)=>setTimeout(run,ms);
+  const scope=cardFlightScope(), later=(ms,run)=>afterTable(scope,ms,run);
   // Chips come from the bank; on small screens, where it is hidden, from beside the deck.
   const chipSource=()=>{
     const bank=rect(q('[data-bank]'));
@@ -771,7 +780,7 @@ function playEffects(list,prev,next,before) {
       if(quick)break;
       const knight=/n/i.test(g.board[e.to]??'');
       const target=at(e.to);
-      fx.travel(target?.querySelector('.chess-piece'),[rect(at(e.from)),rect(target)],{duration:knight?500:400,arc:knight?(target?.offsetHeight??40)*.9:0})
+      fx.travel(target?.querySelector('.chess-piece'),[rect(at(e.from)),rect(target)],{scope,arrival:()=>[at(e.to)?.querySelector('.chess-piece')],duration:knight?500:400,arc:knight?(target?.offsetHeight??40)*.9:0})
         .then(()=>fx.ring(target,{scale:1.5,duration:480}));
       landing=knight?560:440;
       break;
@@ -779,7 +788,7 @@ function playEffects(list,prev,next,before) {
     case 'hop': {
       const end=at(e.path.at(-1));
       if(!quick&&e.path.length>1) {
-        fx.travel(end?.querySelector('.disc'),e.path.map(i=>rect(at(i))),{duration:340,arc:(end?.offsetHeight??40)*.7,host:'dama'});
+        fx.travel(end?.querySelector('.disc'),e.path.map(i=>rect(at(i))),{scope,arrival:()=>[at(e.path.at(-1))?.querySelector('.disc')],duration:340,arc:(end?.offsetHeight??40)*.7,host:'dama'});
         landing=e.path.length*340;
       }
       later(landing,()=>fx.ring(end,{scale:1.5,duration:480}));
@@ -838,7 +847,7 @@ function playEffects(list,prev,next,before) {
       const origin=e.from==='bar'?q('[data-bg="bar"]'):at(e.from);
       if(piece&&origin) {
         const size=rect(piece), o=rect(origin);
-        fx.travel(piece,[{left:o.left+o.width/2-size.width/2,top:o.top+o.height/2-size.height/2,width:size.width,height:size.height},size],{duration:460,arc:60});
+        fx.travel(piece,[{left:o.left+o.width/2-size.width/2,top:o.top+o.height/2-size.height/2,width:size.width,height:size.height},size],{scope,arrival:()=>[at(e.to)?.querySelector('.checker:last-of-type')],duration:460,arc:60});
       }
       break;
     }
@@ -899,7 +908,8 @@ function playEffects(list,prev,next,before) {
       break;
     }
     case 'result': later(landing+300,()=>{
-      if(next.spectator)fx.announce(e.outcome==='draw'?'Pareggio':(isTeamRoom(next)?'Squadra '+(g.result+1):next.players[g.result]??'')+' vince',{tone:'gold',sub:catalog[id].name,hold:1900});
+      if(e.winners)fx.announce('Primi a pari merito',{tone:'gold',sub:e.winners.map(seat=>next.players[seat]).join(' e '),hold:1900});
+      else if(next.spectator)fx.announce(e.outcome==='draw'?'Pareggio':(isTeamRoom(next)?'Squadra '+(g.result+1):next.players[g.result]??'')+' vince',{tone:'gold',sub:catalog[id].name,hold:1900});
       else if(e.outcome==='win'){fx.confetti();fx.announce(isTeamRoom(next)?'Vittoria di squadra!':'Hai vinto!',{tone:'gold',sub:catalog[id].name,hold:2200});}
       else if(e.outcome==='draw')fx.announce('Pareggio',{tone:'teal',hold:1600});
       else fx.announce('Sconfitta',{tone:'ash',sub:(isTeamRoom(next)?'Squadra '+(g.result+1):next.players[g.result]??'Avversario')+' vince',hold:1800});
@@ -959,8 +969,8 @@ function cardFace(id,value) {
 }
 function playingCard(id,value,attribute='',enabled=false,selected=false,inline='',extra='') {
   const {label,style}=cardFace(id,value);
-  const artwork=deckCache.get(id==='uno'?'uno':scopaDeck)?.[cardKey(id,value)];
-  const body=artwork?(typeof artwork==='string'?'<img alt="" draggable="false" src="data:image/webp;base64,'+artwork+'">':cardSvg(artwork)):'<span class="card-text">'+escape(label)+'</span>';
+  const artwork=deckCache.get(id==='uno'?'uno':scopaDeck)?.(cardKey(id,value));
+  const body=artwork?'<img alt="" draggable="false" src="'+artwork+'">':'<span class="card-text">'+escape(label)+'</span>';
   const cls='playing-card '+style+(extra?' '+extra:'');
   if(!attribute)return '<span class="'+cls+'" role="img" aria-label="'+label+'" data-card="'+escape(value)+'"'+(inline?' style="'+inline+'"':'')+'>'+body+'</span>';
   return '<button class="'+cls+'" '+attribute+' aria-label="'+label+'" '+(id==='scopa'?'aria-pressed="'+selected+'"':'')+' '+(enabled?'':'disabled')+'>'+body+'</button>';
@@ -973,7 +983,7 @@ function ensureDeck(deck) {
     toast('Le immagini del mazzo sono indisponibili. Puoi giocare con i nomi delle carte.');
     return {};
   }).then(cards=>{
-    deckCache.set(deck,cards);
+    deckCache.set(deck,deckImages(cards));
     if(game()?.id==='uno'?deck==='uno':['scopa','briscola'].includes(game()?.id)&&deck===scopaDeck)render();
   }).finally(()=>loadingDecks.delete(deck));
 }
@@ -1092,7 +1102,10 @@ function restRect(el) {
   return {left:r.left+r.width/2-width/2,top:r.top+r.height/2-height/2,width,height};
 }
 function cardFlightScope() {
-  return state&&tab==='play'&&connected?[code,state.version,scopaDeck,cardHints,chatOpen].join('/'):'';
+  return state&&tab==='play'&&connected?[code,state.version,scopaDeck,cardHints,chatOpen,movesOpen].join('/'):'';
+}
+function afterTable(scope,delay,run) {
+  setTimeout(()=>{if(scope&&scope===cardFlightScope()&&!document.hidden&&fx.lively())run();},delay);
 }
 function cardSnapshot() {
   if(!fx.lively()||document.hidden||tab!=='play')return null;
@@ -1105,7 +1118,16 @@ function cardSnapshot() {
 function tableProbe(table) {
   const find=selector=>table.querySelector(selector), box=el=>el?.getBoundingClientRect()??null;
   const seatEl=side=>find('.seat[data-other="'+side+'"]');
+  // Measure the complete move before inserting overlays or hiding destination cards.
+  const effects=[];
   return {find,box,seatEl,
+    schedule:(effect,options)=>effects.push(()=>effect(options)),
+    glide(el,from,options) {
+      if(!el||!from)return;
+      const to=box(el);
+      effects.push(()=>fx.glide(el,from,{...options,to}));
+    },
+    start:()=>fx.playTableEffects(effects),
     seatPoint(side) {
       const r=box(seatEl(side)?.querySelector('.avatar'));
       return r?{x:r.left+r.width/2,y:r.top+r.height/2}:null;
@@ -1123,10 +1145,9 @@ function tableProbe(table) {
 // When the thrown card has landed and when a capture has left the table, for the effects that follow.
 const cardTiming={landed:0,cleared:0};
 function animateCards(next,transition,origins) {
-  cardTiming.landed=cardTiming.cleared=0;
   const table=app.querySelector('.card-table'), g=next.game, scope=cardFlightScope();
   if(!scope||!table)return;
-  const {find,box,seatEl,seatPoint,seatColor,reveal}=tableProbe(table);
+  const {find,box,seatEl,seatPoint,seatColor,reveal,schedule,glide,start}=tableProbe(table);
   let sample=restRect(find('.hand .playing-card,.card-center .playing-card'))??origins.hand.values().next().value??origins.faces.values().next().value;
   if(!sample?.width) {
     const probe=document.createElement('span');
@@ -1142,7 +1163,7 @@ function animateCards(next,transition,origins) {
   const fanBack=(side,index)=>'.seat[data-other="'+side+'"] .seat-cards .pile-back:nth-child('+index+')';
   const centerCard=card=>'.card-center [data-card="'+CSS.escape(String(card))+'"]:not(.under)';
   const back='<i class="pile-back '+g.id+'"></i>';
-  const fly=(card,options,selectors=[])=>fx.flight({scope,back,face:card===null?back:playingCard(g.id,card),...options,arrival:reveal(selectors)});
+  const fly=(card,options,selectors=[])=>schedule(fx.flight,{scope,back,face:card===null?back:playingCard(g.id,card),...options,arrival:reveal(selectors)});
   const {played,draws}=transition;
   let wait=0, captured=false;
   if(played) {
@@ -1156,7 +1177,7 @@ function animateCards(next,transition,origins) {
     if(g.id==='briscola'&&g.trick.length===1&&g.previousTrick&&seatPoint(g.previousTrick.winner)) {
       const winner=g.previousTrick.winner;
       lead=540;
-      fx.grab({scope,origin:seatPoint(winner),color:seatColor(winner),gather:200,to:box(find('[data-pile="'+(winner%2)+'"] .capture-art')),
+      schedule(fx.grab,{scope,origin:seatPoint(winner),color:seatColor(winner),gather:200,to:box(find('[data-pile="'+(winner%2)+'"] .capture-art')),
         items:g.previousTrick.plays.map(({card})=>({html:playingCard('briscola',card),from:origins.faces.get(String(card)),tilt:Number(tiltOf(card))}))});
     }
     const gone=g.id==='scopa'&&(takes.length>0||played.clear||transition.newRound);
@@ -1165,7 +1186,7 @@ function animateCards(next,transition,origins) {
     // A card that takes lands beside what it takes; one that stays lands on its own place.
     const landing=landingEl?restRect(landingEl):beside?{left:beside.left+beside.width*.34,top:beside.top+beside.height*.12,width:beside.width,height:beside.height}:center;
     if(!(mine&&draggedMove)&&origin&&landing?.width) {
-      fx.throwCard({scope,origin,to:landing,face,back,flip:!mine,tilt:landingEl?Number(tiltOf(played.card)):8,color,duration:THROW,delay:lead,
+      schedule(fx.throwCard,{scope,origin,to:landing,face,back,flip:!mine,tilt:landingEl?Number(tiltOf(played.card)):8,color,duration:THROW,delay:lead,
         arrival:reveal(landingEl?[centerCard(played.card)]:[])});
       wait=THROW+lead;
     }
@@ -1176,23 +1197,23 @@ function animateCards(next,transition,origins) {
       if(played.clear)gathers.push({...played.clear,seat:played.clear.team===played.side%2?played.side:(played.side+1)%next.players.length});
       for(const {team,seat,cards} of gathers) {
         const pile='[data-pile="'+team+'"]';
-        fx.grab({scope,origin:seatPoint(seat)??origin,color:seatColor(seat),delay:wait,to:box(find(pile+' .capture-art')),
+        schedule(fx.grab,{scope,origin:seatPoint(seat)??origin,color:seatColor(seat),delay:wait,to:box(find(pile+' .capture-art')),
           items:cards.map(card=>card===played.card?{html:face,from:landing,tilt:8,late:wait>0}:{html:playingCard('scopa',card),from:origins.faces.get(String(card)),tilt:Number(tiltOf(card))}),
           arrival:reveal(cards.map(card=>pile+' .capture-art [data-card="'+card+'"]'))});
         wait+=GRAB;
         captured=true;
       }
-      if(captured)setTimeout(()=>fx.sparkle(find('[data-pile="'+gathers[0].team+'"] .capture-art'),fx.palettes.oro,8),wait);
+      if(captured)afterTable(scope,wait,()=>fx.sparkle(find('[data-pile="'+gathers[0].team+'"] .capture-art'),fx.palettes.oro,8));
     }
   }
   cardTiming.cleared=wait;
   // Cards that stay on the table wait for a capture to leave, then glide to their new places.
   for(const el of table.querySelectorAll('.card-center [data-card]')) {
     const from=origins.faces.get(el.dataset.card);
-    if(from)fx.glide(el.closest('.caption-card')??el,from,{delay:captured?wait:120});
+    if(from)glide(el.closest('.caption-card')??el,from,{delay:captured?wait:120});
   }
   const marker=find('.turn-chip');
-  if(marker&&origins.turn)fx.glide(marker,origins.turn,{delay:wait,duration:640});
+  if(marker&&origins.turn)glide(marker,origins.turn,{delay:wait,duration:640});
 
   // Reserve all landing places synchronously, including cards late in the deal.
   const dealCount=draws.reduce((n,count)=>n+count,transition.table.length);
@@ -1227,12 +1248,13 @@ function animateCards(next,transition,origins) {
         deal(publicTrump?g.trumpCard:null,to,false,masks);
       } else if(i===0&&seatPoint(side)&&to&&stock) {
         const taken=Math.min(draws[side],4);
-        fx.grab({scope,origin:seatPoint(side),color:seatColor(side),delay:wait,gather:120,to:{...to,width:stock.width,height:stock.height,left:to.left+to.width/2-stock.width/2,top:to.top+to.height/2-stock.height/2},
+        schedule(fx.grab,{scope,origin:seatPoint(side),color:seatColor(side),delay:wait,gather:120,to:{...to,width:stock.width,height:stock.height,left:to.left+to.width/2-stock.width/2,top:to.top+to.height/2-stock.height/2},
           items:Array.from({length:taken},()=>({html:back,from:stock})),
           arrival:reveal(Array.from({length:draws[side]},(_,k)=>fanBack(side,endCount-draws[side]+k+1)))});
       }
     }
   }
+  start();
 }
 
 function cardCaption(face,label,style='') {
@@ -1297,11 +1319,12 @@ function pokerSnapshot() {
 function animatePoker(prev,next,origins) {
   const table=app.querySelector('.poker-table'), g=next.game, old=prev?.game, scope=cardFlightScope(), total=next.maxPlayers;
   if(!scope||!table||next.players.length<total)return;
-  const {find,box,seatEl,seatPoint,seatColor,reveal}=tableProbe(table);
+  const {find,box,seatEl,seatPoint,seatColor,reveal,schedule,glide,start}=tableProbe(table);
   const deck=box(find('[data-stock] .pile-back')), pot=box(find('[data-pot]'))??origins.pot;
   const spot=seat=>box(find('[data-bet="'+seat+'"]'));
   const sizedLike=(target,size)=>target&&size?{left:target.left+target.width/2-size.width/2,top:target.top+target.height/2-size.height/2,width:size.width,height:size.height}:null;
   const fresh=!old||prev.players.length<total||old.round!==g.round;
+  if(!fresh&&JSON.stringify(old)===JSON.stringify(g))return;
   const last=g.last;
   let wait=0;
   if(fresh&&deck) {
@@ -1313,16 +1336,16 @@ function animatePoker(prev,next,origins) {
       const delay=order++*stagger;
       if(seat===next.side&&!next.spectator) {
         const card=g.hand[i], selector='.hand [data-pocket-card="'+card+'"]';
-        fx.flight({scope,back:pokerBack,face:frenchCard(card),from:deck,to:restRect(find(selector)),flip:true,delay,duration:430,arrival:reveal([selector])});
+        schedule(fx.flight,{scope,back:pokerBack,face:frenchCard(card),from:deck,to:restRect(find(selector)),flip:true,delay,duration:430,arrival:reveal([selector])});
       } else {
         const selector='.seat[data-other="'+seat+'"] .seat-cards .pile-back:nth-child('+(i+1)+')';
-        fx.flight({scope,back:pokerBack,face:pokerBack,from:deck,to:box(find(selector))??sizedLike(box(seatEl(seat)),deck),delay,duration:430,rise:12,arrival:reveal([selector])});
+        schedule(fx.flight,{scope,back:pokerBack,face:pokerBack,from:deck,to:box(find(selector))??sizedLike(box(seatEl(seat)),deck),delay,duration:430,rise:12,arrival:reveal([selector])});
       }
     }
     wait=order*stagger+430;
     // Antes and blinds go in once the cards are down.
     g.contributions.forEach((amount,seat)=>{
-      if(amount>0&&seatPoint(seat))fx.pushChips({scope,size:18,origin:seatPoint(seat),to:g.bets[seat]>0?spot(seat):pot,colors:chipColors(amount,4),color:seatColor(seat),delay:wait,
+      if(amount>0&&seatPoint(seat))schedule(fx.pushChips,{scope,size:18,origin:seatPoint(seat),to:g.bets[seat]>0?spot(seat):pot,colors:chipColors(amount,4),color:seatColor(seat),delay:wait,
         arrival:reveal(g.bets[seat]>0?['[data-bet="'+seat+'"]']:[])});
     });
   } else if(last&&Number.isInteger(last.side)&&seatPoint(last.side)) {
@@ -1332,28 +1355,28 @@ function animatePoker(prev,next,origins) {
       // Cards a player gives up are tossed face down towards the deck.
       const muck=sizedLike(deck??pot,deck??{width:40,height:56});
       const thrown=last.type==='fold'?Math.min(2,old.handCounts[seat]||2):Math.min(3,last.count);
-      for(let i=0;i<thrown;i++)fx.throwCard({scope,origin,to:muck,face:pokerBack,color,fade:true,tilt:(i-1)*22,delay:i*110,duration:THROW});
+      for(let i=0;i<thrown;i++)schedule(fx.throwCard,{scope,origin,to:muck,face:pokerBack,color,fade:true,tilt:(i-1)*22,delay:i*110,duration:THROW});
       wait=THROW+thrown*110;
     } else if(last.type==='check') {
-      fx.knock({scope,origin,toward:middle,color});
+      schedule(fx.knock,{scope,origin,toward:middle,color});
       wait=420;
     } else if(last.type==='call'||last.type==='raise') {
       const added=g.contributions[seat]-old.contributions[seat];
-      fx.pushChips({scope,size:18,origin,to:spot(seat)??pot,colors:chipColors(added),color,arrival:reveal(g.bets[seat]>0?['[data-bet="'+seat+'"]']:[])});
+      schedule(fx.pushChips,{scope,size:18,origin,to:spot(seat)??pot,colors:chipColors(added),color,arrival:reveal(g.bets[seat]>0?['[data-bet="'+seat+'"]']:[])});
       wait=620;
     }
     // A closed betting round sends every bet to the pot.
     if(old.bets.some(Boolean)&&g.bets.every(bet=>bet===0)&&pot) {
       old.bets.forEach((bet,other)=>{
         const amount=bet+(other===seat?g.contributions[seat]-old.contributions[seat]:0);
-        if(amount>0&&spot(other))fx.chipFly({scope,size:18,low:true,from:spot(other),to:pot,colors:chipColors(amount,3),delay:wait,duration:CHIP,stagger:60});
+        if(amount>0&&spot(other))schedule(fx.chipFly,{scope,size:18,low:true,from:spot(other),to:pot,colors:chipColors(amount,3),delay:wait,duration:CHIP,stagger:60});
       });
       wait+=CHIP+200;
     }
     // New community cards are turned one after the other.
     g.board.filter(card=>!old.board.includes(card)).forEach((card,i)=>{
       const selector='[data-board-card="'+card+'"]';
-      if(deck)fx.flight({scope,back:pokerBack,face:frenchCard(card),from:deck,to:restRect(find(selector)),flip:true,delay:wait+i*170,duration:460,arrival:reveal([selector])});
+      if(deck)schedule(fx.flight,{scope,back:pokerBack,face:frenchCard(card),from:deck,to:restRect(find(selector)),flip:true,delay:wait+i*170,duration:460,arrival:reveal([selector])});
     });
     // Whoever changed cards is served the replacements from the deck.
     if(last.type==='draw'&&last.count>0&&deck) {
@@ -1361,7 +1384,7 @@ function animatePoker(prev,next,origins) {
       fresh.forEach((card,i)=>{
         const selector=card?'.hand [data-pocket-card="'+card+'"]':'.seat[data-other="'+seat+'"] .seat-cards .pile-back:nth-child('+(g.handCounts[seat]-i)+')';
         const to=card?restRect(find(selector)):box(find(selector));
-        fx.flight({scope,back:pokerBack,face:card?frenchCard(card):pokerBack,from:deck,to,flip:!!card,delay:wait+i*130,duration:430,rise:card?undefined:12,arrival:reveal([selector])});
+        schedule(fx.flight,{scope,back:pokerBack,face:card?frenchCard(card):pokerBack,from:deck,to,flip:!!card,delay:wait+i*130,duration:430,rise:card?undefined:12,arrival:reveal([selector])});
       });
       wait+=fresh.length*130+430;
     }
@@ -1369,13 +1392,14 @@ function animatePoker(prev,next,origins) {
     if(old.phase!=='complete'&&g.phase==='complete'&&g.showdown&&origins.pot) g.showdown.payouts.forEach((amount,winner)=>{
       const stack=box(find('[data-stack="'+winner+'"]'))??box(seatEl(winner));
       if(amount>0&&stack) {
-        fx.chipFly({scope,size:18,low:true,from:origins.pot,to:stack,colors:chipColors(amount,6),delay:wait+500,duration:CHIP+120,stagger:70});
-        setTimeout(()=>{fx.sparkle(seatEl(winner)?.querySelector('.avatar'),fx.palettes.oro,18);fx.flash(seatEl(winner),'fx-join',900);},wait+500+CHIP);
+        schedule(fx.chipFly,{scope,size:18,low:true,from:origins.pot,to:stack,colors:chipColors(amount,6),delay:wait+500,duration:CHIP+120,stagger:70});
+        afterTable(scope,wait+500+CHIP,()=>{fx.sparkle(seatEl(winner)?.querySelector('.avatar'),fx.palettes.oro,18);fx.flash(seatEl(winner),'fx-join',900);});
       }
     });
   }
   const marker=find('.turn-chip');
-  if(marker&&origins.turn)fx.glide(marker,origins.turn,{delay:wait,duration:640});
+  if(marker&&origins.turn)glide(marker,origins.turn,{delay:wait,duration:640});
+  start();
 }
 function strategyBoard(g) {
   const active=acting();
@@ -1474,6 +1498,10 @@ function movePanel(g) {
     '</tbody></table></div><button class="outline move-copy" type="button" data-action="copy-moves">'+icon('copy')+'Copia mosse</button>':empty+'<p class="move-empty">'+hint+'</p>')+'</section>';
 }
 function gameTable(g) {
+  if(g.id==='memory'){
+    warmMemoryFigures();
+    return memoryTable(state,{active:acting(),escape,figures:memoryFigures,cardHints});
+  }
   if(g.id==='briscola') {
     ensureDeck(scopaDeck);
     return renderBriscola(g,{...state,deck:scopaDeck,cardHints,active:acting()&&deckCache.has(scopaDeck),playingCard,tableSeats,tiltOf,watching:state.spectator===true});
@@ -1532,7 +1560,7 @@ function room() {
     closure+again+'<div class="room-layout'+(dock?' has-dock':'')+(tab==='play'&&!s.spectator&&seatHasTurn(s,s.side)&&!pending?' your-turn':'')+'">'+
     '<div id="tabpanel" role="tabpanel" aria-labelledby="tab-'+tab+'">'+(tab==='rules'?rules(g.id,tabChanged):
     '<div class="match"'+(elapsedStyle()?' style="'+elapsedStyle()+'"':'')+'>'+
-    '<div class="banner-row"><div class="banner '+tone+'" role="status"><i></i>'+escape(wording)+'</div>'+(cards?cardTools(g):'')+'</div>'+
+    '<div class="banner-row"><div class="banner '+tone+'" role="status"><i></i>'+escape(wording)+'</div>'+(cards&&g.id!=='memory'?cardTools(g):'')+'</div>'+
     pass+turnNotes(s,acting()).map(note=>'<p class="subnote turn-note" role="status">'+escape(note)+'</p>').join('')+
     (cards?board:around?'<div class="duel"><div class="players top">'+plate(1-s.side)+'</div><div class="duel-board">'+board+'</div><div class="players bottom">'+plate(s.side)+'</div></div>':
       '<div class="players">'+Array.from({length:capacity},(_,i)=>plate(i)).join('')+'</div>'+board)+
@@ -1543,6 +1571,7 @@ function room() {
     (dock?'<aside class="side-dock" aria-label="'+(showMoves&&chatOpen?'Mosse e chat':showMoves?'Mosse':'Chat')+'"><div class="dock-inner">'+(showMoves?movePanel(g):'')+(chatOpen?chatPanel():'')+'</div></aside>':'')+'</div>';
 }
 let paintedRoom=null, arrivedAt=0;
+let memoryMatch=null, memoryVersion=null;
 const baseTitle=document.title;
 function updateTitle() {
   if(!state){document.title=baseTitle;return;}
@@ -1559,7 +1588,7 @@ function render() {
   const deckFocused=focused?.id==='scopa-deck'?'scopa-deck':null;
   const chatFocused=focused?.id==='chat-input', cursor=chatFocused?focused.selectionStart:null;
   const richFocused=focused?.id==='chat-input-rich', richAt=richFocused?rich.getOffsets(focused):null;
-  const focusData=focused?.closest('#app')&&Object.entries(focused.dataset).find(([key])=>['tab','cell','action','naval','discard','poker','hand'].includes(key));
+  const focusData=focused?.closest('#app')&&Object.entries(focused.dataset).find(([key])=>['tab','cell','action','naval','discard','poker','hand','memory'].includes(key));
   const entry=restoring?'<section class="entry"><h1>Caricamento partita…</h1></section>':
     expired?'<section class="entry"><h1>Stanza non disponibile</h1><p>La partita potrebbe essere scaduta o il server locale potrebbe essere stato riavviato.</p><a class="primary" href="/">Torna alla Home</a></section>':
     restoreError?'<section class="entry"><h1>Connessione interrotta</h1><p>'+restoreError+'</p><button class="primary" data-action="restore">Riprova</button></section>':
@@ -1568,7 +1597,16 @@ function render() {
   const arriving=Boolean(state)&&fx.lively()&&performance.now()-arrivedAt<1100;
   app.classList.toggle('arrive',arriving);
   app.style.setProperty('--arrive-elapsed',arriving?'-'+Math.round(performance.now()-arrivedAt)+'ms':'0ms');
+  const match=state?.game.id==='memory'&&tab==='play'?code+'/'+state.games:null;
+  const previousMemory=match&&memoryMatch===match?app.querySelector('.memory-table'):null;
   app.innerHTML=state?room():code?entry:lobby();
+  if(previousMemory){
+    const fresh=app.querySelector('.memory-table');
+    patchMemoryTable(previousMemory,fresh,{animate:fx.lively()&&!document.hidden&&isFresh()&&state.version===memoryVersion+1});
+    fresh.replaceWith(previousMemory);
+  }
+  memoryMatch=match;
+  memoryVersion=state?.version;
   app.classList.toggle('awaiting-players',!!state&&state.players.length<(state.maxPlayers??2));
   fx.syncCardFlights(cardFlightScope());
   updateTitle();
@@ -1584,7 +1622,6 @@ function render() {
   if(moveList)moveList.scrollTop=moveList.scrollHeight;
   joinButton.hidden=!!state;
   paintRooms();
-  fx.reconceal(app);
   if(focusData) {
     const [key,value]=focusData;
     const button=Array.from(app.querySelectorAll('button')).find(el=>el.dataset[key]===value);
@@ -1612,7 +1649,20 @@ async function send(action) {
     try {savePending(action.close?closeMessage(state,action.close):{id:random(16),version:state.version,action});}
     catch(error){toast(error.message);return;}
   }
-  busy=true;render();
+  busy=true;
+  // Only the controls and turn indicator change while the request is travelling.
+  // Keep cards, boards, chat, focus and any flights attached to their current DOM.
+  const [tone,wording]=banner(state), status=app.querySelector('.banner');
+  if(status) {
+    status.className='banner '+tone;
+    status.replaceChildren(document.createElement('i'),wording);
+  }
+  app.querySelector('.room-layout')?.classList.remove('your-turn');
+  for(const control of app.querySelectorAll('.match button:enabled,.match input:enabled,.close-game,.closure-notice button')) {
+    if(control.hasAttribute('data-memory'))control.setAttribute('aria-disabled','true');
+    else if(!control.closest('.banner-row,.navy-switch,.pile-inspect,.memory-header'))control.disabled=true;
+  }
+  updateTitle();
   let answer=null, failure=null;
   try {answer=await api('/moves',pending);}
   catch(error) {failure=error;}
@@ -1631,7 +1681,7 @@ async function send(action) {
     toast('Connessione interrotta. Puoi recuperare la stessa mossa.');
     if(pushed)accept(pushed);
   }
-  if(state===before)render();
+  if(state?.version===before?.version)render();
 }
 function playCell(i) {
   if(!acting())return;
@@ -1680,15 +1730,17 @@ function placement(at) {
   const occupied=draft.flatMap((other,i)=>i===editingShip?[]:tiles(other,sizes()[i]));
   return {cells,fits:cells.every(i=>i>=0&&!occupied.includes(i))};
 }
+let previewCells=[];
 function preview(at) {
-
   hoverAt=at;
   const {cells,fits}=placement(at??anchor);
-  for(const el of app.querySelectorAll('.navy-setup [data-naval]')) {
-    const covered=cells.includes(Number(el.dataset.naval));
-    el.classList.toggle('ghost-ok',covered&&fits);
-    el.classList.toggle('ghost-bad',covered&&!fits);
+  const next=cells.filter(i=>i>=0).map(i=>app.querySelector('.navy-setup [data-naval="'+i+'"]')).filter(Boolean);
+  for(const el of previewCells)if(!next.includes(el))el.classList.remove('ghost-ok','ghost-bad');
+  for(const el of next) {
+    el.classList.toggle('ghost-ok',fits);
+    el.classList.toggle('ghost-bad',!fits);
   }
+  previewCells=next;
 }
 const shipSectors=(ship,length)=>fleetSectors(ship,length,seaSize());
 // Turns the ship under `pivot`. When the clicked sector has no room, another sector or the
@@ -1742,10 +1794,18 @@ app.addEventListener('pointerdown',e=>{
 });
 function moveShip(e) {
   if(drag?.pointer!==e.pointerId)return;
-  const el=document.elementFromPoint(e.clientX,e.clientY)?.closest('.navy-setup [data-naval]:enabled');
-  drag.marker.style.transform='translate('+e.clientX+'px,'+e.clientY+'px)';
-  drag.marker.classList.toggle('over-grid',!!el);
-  preview(el?Number(el.dataset.naval):null);
+  const d=drag;
+  d.x=e.clientX;
+  d.y=e.clientY;
+  if(!d.frame)d.frame=requestAnimationFrame(()=>{
+    d.frame=0;
+    if(d!==drag)return;
+    const el=document.elementFromPoint(d.x,d.y)?.closest('.navy-setup [data-naval]:enabled');
+    const at=el?Number(el.dataset.naval):null;
+    d.marker.style.transform='translate('+d.x+'px,'+d.y+'px)';
+    d.marker.classList.toggle('over-grid',!!el);
+    if(at!==hoverAt)preview(at);
+  });
 }
 window.addEventListener('pointermove',moveShip);
 function finishDrag(e) {
@@ -1939,6 +1999,10 @@ app.addEventListener('click',async e=>{
   if(ignoreClick)return;
   const b=e.target.closest('button');if(!b)return;
   const d=b.dataset;
+  if(d.memory!==undefined) {
+    if(acting()&&b.getAttribute('aria-disabled')==='false')send({at:Number(d.memory)});
+    return;
+  }
   if(d.discard&&acting()&&game().legal?.draw) {
     if(discards.has(d.discard))discards.delete(d.discard);
     else if(discards.size<game().legal.draw)discards.add(d.discard);
@@ -2068,6 +2132,7 @@ app.addEventListener('click',e=>{
   const b=e.target.closest('[data-cell]');
   if(b)promotionTarget=Number(b.dataset.cell);
 },true);
+app.addEventListener('keydown',memoryKeydown);
 app.addEventListener('keydown',e=>{
   if(e.target.getAttribute('role')==='tab'&&['ArrowLeft','ArrowRight'].includes(e.key)){
     e.preventDefault();tab=tab==='play'?'rules':'play';render();document.querySelector('#tab-'+tab).focus();
@@ -2499,19 +2564,29 @@ soundToggle.addEventListener('click',()=>{
 });
 syncSoundToggle();
 // Game tiles lean towards the pointer and catch the lamp light.
+let hoverFrame=0, hoverTile=null, hoverX=0, hoverY=0;
 app.addEventListener('pointermove',e=>{
-  if(e.pointerType!=='mouse'||!fx.lively())return;
+  if(state||e.pointerType!=='mouse'||!fx.lively())return;
   const tile=e.target.closest?.('.cards .card');
   if(!tile)return;
-  const r=tile.getBoundingClientRect(), x=(e.clientX-r.left)/r.width, y=(e.clientY-r.top)/r.height;
-  tile.style.setProperty('--rx',((.5-y)*7).toFixed(2)+'deg');
-  tile.style.setProperty('--ry',((x-.5)*9).toFixed(2)+'deg');
-  tile.style.setProperty('--mx',(x*100).toFixed(1)+'%');
-  tile.style.setProperty('--my',(y*100).toFixed(1)+'%');
+  hoverTile=tile;hoverX=e.clientX;hoverY=e.clientY;
+  if(!hoverFrame)hoverFrame=requestAnimationFrame(()=>{
+    hoverFrame=0;
+    const target=hoverTile;
+    if(!target?.isConnected)return;
+    const r=target.getBoundingClientRect(), x=(hoverX-r.left)/r.width, y=(hoverY-r.top)/r.height;
+    target.style.setProperty('--rx',((.5-y)*7).toFixed(2)+'deg');
+    target.style.setProperty('--ry',((x-.5)*9).toFixed(2)+'deg');
+    target.style.setProperty('--mx',(x*100).toFixed(1)+'%');
+    target.style.setProperty('--my',(y*100).toFixed(1)+'%');
+  });
 });
 app.addEventListener('pointerout',e=>{
   const tile=e.target.closest?.('.cards .card');
-  if(tile&&!tile.contains(e.relatedTarget)){tile.style.removeProperty('--rx');tile.style.removeProperty('--ry');}
+  if(tile&&!tile.contains(e.relatedTarget)){
+    if(tile===hoverTile)hoverTile=null;
+    tile.style.removeProperty('--rx');tile.style.removeProperty('--ry');
+  }
 });
 // R turns the ship being placed, also while it is dragged.
 document.addEventListener('keydown',e=>{

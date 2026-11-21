@@ -17,3 +17,23 @@ export function cardSvg(vector) {
   const [width,height,shapes]=vector;
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+width+' '+height+'" aria-hidden="true" focusable="false">'+shapes+'</svg>';
 }
+
+// A deck lives for the lifetime of the page. Table, hand, capture gallery and flying cards
+// share one browser image resource per face, including the scalable UNO artwork.
+export function deckImages(cards) {
+  const urls=new Map();
+  return key=>{
+    const face=cards[key];
+    if(!face)return null;
+    if(!urls.has(key)) {
+      let blob;
+      if(typeof face==='string') {
+        const decoded=atob(face), bytes=new Uint8Array(decoded.length);
+        for(let i=0;i<bytes.length;i++)bytes[i]=decoded.charCodeAt(i);
+        blob=new Blob([bytes],{type:'image/webp'});
+      } else blob=new Blob([cardSvg(face)],{type:'image/svg+xml'});
+      urls.set(key,URL.createObjectURL(blob));
+    }
+    return urls.get(key);
+  };
+}

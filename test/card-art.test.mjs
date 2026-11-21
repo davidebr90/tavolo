@@ -1,6 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cardKey,cardSvg,loadDeck,scopaDecks} from '../public/card-art.mjs';
+import {cardKey,cardSvg,deckImages,loadDeck,scopaDecks} from '../public/card-art.mjs';
+
+test('Repeated card faces reuse one local image with the original scan or scalable vector',async t=>{
+  for(const [deck,key] of [['napoletane','1d'],['uno','R0']]) {
+    const cards=await loadDeck(deck), image=deckImages(cards), url=image(key);
+    t.after(()=>URL.revokeObjectURL(url));
+    assert.equal(image(key),url);
+    assert.equal(image('missing'),null);
+    const resource=await (await fetch(url)).blob();
+    if(deck==='uno') {
+      assert.equal(resource.type,'image/svg+xml');
+      assert.equal(await resource.text(),cardSvg(cards[key]));
+    } else {
+      assert.equal(resource.type,'image/webp');
+      assert.deepEqual(Buffer.from(await resource.arrayBuffer()),Buffer.from(cards[key],'base64'));
+    }
+  }
+});
 
 test('Original HD scans cover the complete regional decks without external assets',async()=>{
   for(const deck of Object.keys(scopaDecks)) {

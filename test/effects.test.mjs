@@ -3,9 +3,18 @@ import assert from 'node:assert/strict';
 import {create,join,submit,snapshot} from '../src/room.mjs';
 import {fleet} from '../src/games.mjs';
 import {moveEffects,seatHasTurn,kingSquare,cardTransition,scopaProgress} from '../public/effects.mjs';
+import {roomStatus} from '../public/rooms.mjs';
 
 const A='a'.repeat(32), B='b'.repeat(32);
 let counter=0;
+test('A Memory mismatch waits on the table and dashboard before announcing the next seat',()=>{
+  const room={players:['A','B'],side:0,game:{id:'memory',result:null,turn:0,phase:'compare'}};
+  assert.equal(roomStatus(room).tone,'waiting');
+  for(const seat of [0,1])assert.equal(seatHasTurn(room,seat),false);
+  room.game={...room.game,phase:'first',turn:1};
+  assert.equal(seatHasTurn(room,1),true);
+  assert.equal(roomStatus({...room,side:1}).tone,'your');
+});
 function table(game,options) {
   const room=create(game,'Ada',A,options);
   join(room,'Bruno',B);
@@ -17,6 +26,24 @@ function move(room,token,action,viewer=token) {
   return [before,snapshot(room,viewer)];
 }
 const types=list=>list.map(effect=>effect.type);
+
+test('Memory distinguishes tied leaders from other seats and identifies them for spectators',()=>{
+  const players=['Ada','Leo','Ivo'], base={maxPlayers:3,players,version:1,
+    game:{id:'memory',turn:1,result:null,winners:[]}};
+  const ended={...base,version:2,game:{...base.game,result:'draw',winners:[0,2]}};
+  for(const [side,outcome,label] of [[0,'draw','Primo a pari merito'],[1,'loss','Partita conclusa'],[2,'draw','Primo a pari merito']]){
+    const state={...ended,side};
+    assert.equal(roomStatus(state).label,label);
+    assert.deepEqual(moveEffects({...base,side},state).find(e=>e.type==='result'),{type:'result',outcome,winners:[0,2]});
+  }
+  const watcher={...ended,side:0,spectator:true};
+  assert.equal(roomStatus(watcher).label,'Primi a pari merito');
+  assert.deepEqual(moveEffects({...base,side:0,spectator:true},watcher).find(e=>e.type==='result'),
+    {type:'result',outcome:'draw',winners:[0,2]});
+  const everyone={...ended,side:1,game:{...ended.game,winners:[0,1,2]}};
+  assert.equal(roomStatus(everyone).label,'Pareggio');
+  assert.deepEqual(moveEffects({...base,side:1},everyone).find(e=>e.type==='result'),{type:'result',outcome:'draw'});
+});
 
 test('Joining the last seat starts the match and hands the first turn to the host',()=>{
   const room=create('tris','Ada',A);

@@ -1,7 +1,7 @@
 // Turns two consecutive room snapshots into a list of visual events.
 // Pure data in, pure data out: the DOM side lives in motion.mjs and app.mjs.
 
-import { isTeamRoom } from './rooms.mjs';
+import { isTeamRoom, tiedLeaders, comparingMemory } from './rooms.mjs';
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 
 // An initial snapshot from a restored tab describes the table as it is now.
@@ -40,7 +40,7 @@ export function scopaProgress(g) {
 export function seatHasTurn(room,seat) {
   const g=room?.game;
   return !!g&&!room.closed&&room.players.length===(room.maxPlayers??2)&&g.result===null&&g.turn===seat&&
-    (g.id!=='naval'||g.ready.every(Boolean));
+    !comparingMemory(g)&&(g.id!=='naval'||g.ready.every(Boolean));
 }
 
 export function kingSquare(board,turn) {
@@ -155,8 +155,10 @@ export function moveEffects(prev,next) {
   else if(b.last&&!same(a.last,b.last))out.push(...gameEffects(a,b,side));
   if(b.id==='chess'&&b.check&&b.result===null&&!same(a.last,b.last))out.push({type:'check',at:kingSquare(b.board,b.turn)});
   if(a.result===null&&b.result!==null&&!next.closed) {
+    const winners=tiedLeaders(next);
     const mine=b.result===(isTeamRoom(next)?side%2:side);
-    out.push({type:'result',outcome:b.result==='draw'?'draw':mine?'win':'loss'});
+    if(winners) out.push({type:'result',outcome:next.spectator||winners.includes(side)?'draw':'loss',winners});
+    else out.push({type:'result',outcome:b.result==='draw'?'draw':mine?'win':'loss'});
   }
   if(!prev.closed&&next.closed)out.push({type:'closed'});
   if(!seatHasTurn(prev,prev.side)&&seatHasTurn(next,side))out.push({type:'your-turn'});

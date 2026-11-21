@@ -1,6 +1,12 @@
 // Rule cards for the Regole tab. Each section is [title, text or list, kind].
 // kind 'warn' marks penalties and special cases, 'tip' marks strategy advice.
 export const guides={
+  memory:[
+    ['Le carte','Da due a quattro giocatori cercano dodici coppie di uccelli su un tavolo di ventiquattro carte coperte. Puoi giocare anche contro il computer.'],
+    ['Il tuo turno','Gira una carta e poi una seconda. Due figure uguali restano scoperte, valgono un punto e ti danno un altro turno. Due figure diverse restano visibili per un momento, poi si ricoprono e il turno passa al posto successivo.'],
+    ['Fine partita','Quando tutte le coppie sono scoperte, vince chi ne ha raccolte di più. Chi condivide il punteggio più alto chiude a pari merito. La rivincita rimescola tutte le carte.'],
+    ['Le illustrazioni','L’Atlante degli uccelli raccoglie dettagli delle incisioni di Robert Havell su disegno di John James Audubon, dalla collezione Open Access della National Gallery of Art di Washington. Premi Aa per leggere i nomi sulle carte scoperte.']
+  ],
   briscola:[
     ['Il mazzo e la briscola','Ricevi tre carte da un mazzo italiano di quaranta. La carta scoperta sotto il mazzo indica il seme di briscola e viene pescata per ultima. In quattro, i posti 1 e 3 giocano contro i posti 2 e 4.'],
     ['Come si prende','Gioca una carta qualsiasi. Vince la briscola più alta o, se nessuno gioca briscola, la carta più alta del seme di uscita. In ordine di forza vengono asso, tre, re, cavallo, fante, sette, sei, cinque, quattro e due. Chi prende pesca per primo e apre la presa successiva.'],
