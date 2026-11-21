@@ -1,4 +1,6 @@
 import { guides } from './guides.mjs';
+import { chessPiece } from './chess-styles.mjs';
+import { chessStyleButton, chessPicker, paintChessStyle } from './chess-picker.mjs';
 import { memoryTable, patchMemoryTable, memoryKeydown } from './memory-table.mjs';
 import { memoryFigures, warmMemoryFigures } from './memory-figures.mjs';
 import { catalog } from './catalog.mjs';
@@ -55,7 +57,11 @@ const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>'
 const coord=(i,width)=>String.fromCharCode(65+i%width)+(Math.floor(i/width)+1);
 const square=i=>String.fromCharCode(97+i%8)+(8-(i>>3));
 const pieceLabel={k:'re',q:'donna',r:'torre',b:'alfiere',n:'cavallo',p:'pedone'};
-const glyph={k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
+function chessPieceLabel(piece) {
+  const kind=piece.toLowerCase(), feminine=kind==='r'||kind==='q';
+  const side=piece===kind?(feminine?'nera':'nero'):(feminine?'bianca':'bianco');
+  return pieceLabel[kind]+' '+side;
+}
 const game=()=>state?.game;
 const href=()=>location.origin+'/?stanza='+code;
 const watchHref=()=>href()+'&guarda=1';
@@ -122,6 +128,21 @@ const isFresh=()=>Boolean(state)&&state.version===fresh.version&&performance.now
 const elapsedStyle=()=>isFresh()?'--fx-elapsed:-'+Math.round(performance.now()-fresh.at)+'ms':'';
 let held=null, underTop=null;
 function accept(next,{joining=false,reconnect=false}={}) {
+  if(state?.game.id==='chess'&&next.game.id==='chess'){
+    const current=state.chessStyle, change=next.chessStyle;
+    if((change?.revision??0)>(current?.revision??0)){
+      state={...state,chessStyle:change};
+      paintChessStyle(change.id);
+      if(change.author){
+        const notice=change.author+' ha cambiato colore e stile degli scacchi!';
+        toast(notice);
+        const author=modal.querySelector('.chess-style-author');
+        if(author)author.textContent='Ultimo cambio di '+change.author+'.';
+        const pickerStatus=modal.querySelector('.chess-picker-status');
+        if(modal.open&&pickerStatus)pickerStatus.textContent=notice;
+      }
+    } else if((current?.revision??0)>(change?.revision??0))next={...next,chessStyle:current};
+  }
   if(state && next.version<state.version) return;
   // The live channel often delivers our own move before the HTTP answer. Keep it until the
   // answer clears the pending move, so the board is drawn once and its animation is not cut.
@@ -271,6 +292,37 @@ async function restoreRoom() {
 function showModal(content) {
   modal.innerHTML='<form method="dialog" class="dialog-close"><button aria-label="Chiudi">×</button></form>'+content;
   modal.showModal();
+}
+function openChessPicker(){
+  if(!connected||state?.game.id!=='chess'||state.spectator||state.closed||!state.chessStyle)return;
+  showModal(chessPicker(state));
+  modal.setAttribute('aria-labelledby','chess-picker-title');
+  modal.addEventListener('close',()=>{
+    modal.removeAttribute('aria-labelledby');
+    if(document.activeElement===document.body)app.querySelector('[data-action="chess-style"]')?.focus({preventScroll:true});
+  },{once:true});
+  if(state.chessStyle.author)modal.querySelector('.chess-style-author').textContent='Ultimo cambio di '+state.chessStyle.author+'.';
+  modal.querySelector('[aria-pressed=true]')?.focus();
+}
+async function chooseChessStyle(button){
+  const picker=button.closest('.chess-picker'), id=button.dataset.chooseStyle, roomCode=code;
+  if(!picker||picker.getAttribute('aria-busy')==='true'||!state?.chessStyle||state.spectator||state.closed)return;
+  if(id===state.chessStyle.id){modal.close();return;}
+  picker.setAttribute('aria-busy','true');
+  const message=picker.querySelector('.chess-picker-status');
+  message.textContent='Applico lo stile…';
+  try {
+    const next=await api('/chess-style',{id,revision:state.chessStyle.revision});
+    if(code!==roomCode)return;
+    accept(next);
+    if(picker.isConnected&&modal.open)modal.close();
+  } catch(error) {
+    if(code!==roomCode)return;
+    if(error.status===409){
+      try {const latest=await api();if(code===roomCode)accept(latest);} catch {}
+    }
+    message.textContent=error.message;
+  } finally {picker.removeAttribute('aria-busy');}
 }
 const modeTitle=mode=>mode==='code'?'Modalità codice attiva: torna al testo formattato':'Mostra i codici di formattazione';
 function editorTools() {
@@ -619,9 +671,9 @@ const distance=(a,b,width=8)=>Math.max(Math.abs(a%width-b%width),Math.abs(Math.f
 function cell(content,classes,attrs,label,enabled) {
   return '<button type="button" class="cell '+classes+'" '+attrs+' aria-label="'+escape(label)+'" '+(enabled?'':'disabled')+'>'+content+'</button>';
 }
-function boardRuler(boardHtml,files,ranks) {
+function boardRuler(boardHtml,files,ranks,chessStyle) {
   const ruler=(name,values)=>'<div class="chess-ruler '+name+'" aria-hidden="true">'+Array.from(values,c=>'<span>'+c+'</span>').join('')+'</div>';
-  return '<div class="chess-frame" style="--ruler-count:'+files.length+'">'+ruler('chess-ranks',ranks)+boardHtml+ruler('chess-files',files)+'</div>';
+  return '<div class="chess-frame"'+(chessStyle?' data-chess-style="'+escape(chessStyle)+'"':'')+' style="--ruler-count:'+files.length+'">'+ruler('chess-ranks',ranks)+boardHtml+ruler('chess-files',files)+'</div>';
 }
 function checker(g) {
   const {id,board,moves,last}=g, chess=id==='chess';
@@ -647,9 +699,8 @@ function checker(g) {
     const cellStyle=[line>=0?'--k:'+line:'',id==='four'&&newest&&isLast?'--row:'+Math.floor(i/7):''].filter(Boolean).join(';');
     let content='', label=flip||id==='reversi'?square(i):coord(i,width);
     if(v && chess) {
-      const white=v===v.toUpperCase();
-      content='<span class="chess-piece '+(white?'white':'black')+'">'+glyph[v.toLowerCase()]+'</span>';
-      label+=' '+pieceLabel[v.toLowerCase()]+(white?' bianco':' nero');
+      content=pieceHtml(v);
+      label+=' '+chessPieceLabel(v);
     } else if(v) {
       const flipping=flipped.indexOf(i);
       content=id==='tris'?'<svg class="mark p'+v+'" viewBox="0 0 100 100" aria-hidden="true">'+(v===1?'<path pathLength="1" d="M24 24 76 76M76 24 24 76"/>':'<circle pathLength="1" cx="50" cy="50" r="28"/>')+'</svg>':
@@ -668,7 +719,7 @@ function checker(g) {
     return cell(content,style+(movable?' draggable-piece'+(mustTake?' must':''):''),'data-cell="'+i+'"'+(cellStyle?' style="'+cellStyle+'"':''),id==='four'?'Colonna '+(i%7+1):label,choose);
   }).join('');
   const boardHtml='<div class="board '+id+'">'+cells+'</div>';
-  return flip||id==='reversi'?boardRuler(boardHtml,mayReverse?'hgfedcba':'abcdefgh',mayReverse?'12345678':'87654321'):boardHtml;
+  return flip||id==='reversi'?boardRuler(boardHtml,mayReverse?'hgfedcba':'abcdefgh',mayReverse?'12345678':'87654321',chess?(state.chessStyle?.id??'classico'):null):boardHtml;
 }
 function tiles(ship,length) {
   return shipTiles(ship,length,seaSize());
@@ -703,7 +754,7 @@ function showStrike(shot) {
   setTimeout(()=>fx.remove(),1800);
 }
 let draggedMove=false;
-const pieceHtml=p=>'<span class="chess-piece '+(p===p.toUpperCase()?'white':'black')+'">'+glyph[p.toLowerCase()]+'</span>';
+const pieceHtml=p=>chessPiece(p,state?.chessStyle?.id);
 const discHtml=v=>'<span class="disc p'+((v-1)%2+1)+'">'+(v>=3?'♛':'')+'</span>';
 function boardSnapshot(id) {
   if(id!=='nim'||!fx.lively())return null;
@@ -1461,7 +1512,7 @@ function chipStat(s,seat) {
   const taken=s.game.id==='chess'?chessMaterial(s.game.board).captured[seat]:[];
   if(!text&&!taken.length)return '';
   const label=taken.length?'Catturati: '+taken.map(p=>pieceLabel[p.toLowerCase()]).join(', '):'';
-  return '<span class="stat">'+(taken.length?'<span class="taken '+(seat===0?'black':'white')+'" role="img" aria-label="'+escape(label)+'">'+taken.map(p=>glyph[p.toLowerCase()]).join('')+'</span>':'')+(text?'<b>'+escape(text)+'</b>':'')+'</span>';
+  return '<span class="stat">'+(taken.length?'<span class="taken '+(seat===0?'black':'white')+'" role="img" aria-label="'+escape(label)+'">'+taken.map(pieceHtml).join('')+'</span>':'')+(text?'<b>'+escape(text)+'</b>':'')+'</span>';
 }
 const initial=(name,markup)=>escape(Array.from(((markup?parseChat(markup).text:name)??'').trim())[0]?.toLocaleUpperCase('it')??'?');
 function chatPanel() {
@@ -1481,20 +1532,32 @@ function paintChat() {
   markChatRead();
   if(indicator)indicator.innerHTML=chatLabel(state);
 }
+function moveCell(entry,chess) {
+  if(!entry)return '—';
+  const san=escape(entry.san);
+  if(!chess||!entry.san.includes('x'))return san;
+  const captured=entry.captured;
+  if(!captured)return '<span title="Pezzo catturato non registrato">'+san+'</span>';
+  const label='Pezzo catturato: '+chessPieceLabel(captured);
+  return '<span class="chess-capture-move">'+san+
+    '<span class="chess-move-capture" role="img" title="'+label+'" aria-label="'+label+'">'+pieceHtml(captured)+'</span></span>';
+}
 function movePanel(g) {
+  const chess=g.id==='chess';
   const rows=new Map();
-  for(const {ply,san} of g.history??[]) {
+  for(const entry of g.history??[]) {
+    const {ply}=entry;
     const number=Math.ceil(ply/2);
     if(!rows.has(number))rows.set(number,[]);
-    rows.get(number)[(ply-1)%2]=san;
+    rows.get(number)[(ply-1)%2]=entry;
   }
   const last=g.id==='chess'?lastChessMove(g):null;
   const empty=last?'<p class="move-empty">Ultima mossa disponibile: <strong>'+escape(last)+'</strong></p>':'';
   const hint=!Array.isArray(g.history)?'Riavvia node dev.mjs dalla cartella aggiornata per registrare le prossime mosse.':
     last?'La cronologia completa non è disponibile per le mosse precedenti all’aggiornamento.':'Le mosse registrate compariranno qui.';
   return '<section class="move-panel" id="move-panel" aria-labelledby="moves-title"><div class="chat-head"><h2 id="moves-title">Mosse</h2><button class="link panel-close" data-action="moves" aria-label="Chiudi cronologia">'+icon('close')+'</button></div>'+
-    (rows.size?'<div class="move-list"><table><thead><tr><th scope="col">N.</th><th scope="col">Bianco</th><th scope="col">Nero</th></tr></thead><tbody>'+
-    Array.from(rows,([n,[white,black]])=>'<tr><th scope="row">'+n+'</th><td>'+escape(white??'—')+'</td><td>'+escape(black??'—')+'</td></tr>').join('')+
+    (rows.size?'<div class="move-list'+(chess?' chess-moves':'')+'"><table><thead><tr><th scope="col">N.</th><th scope="col">Bianco</th><th scope="col">Nero</th></tr></thead><tbody>'+
+    Array.from(rows,([n,[white,black]])=>'<tr><th scope="row">'+n+'</th><td>'+moveCell(white,chess)+'</td><td>'+moveCell(black,chess)+'</td></tr>').join('')+
     '</tbody></table></div><button class="outline move-copy" type="button" data-action="copy-moves">'+icon('copy')+'Copia mosse</button>':empty+'<p class="move-empty">'+hint+'</p>')+'</section>';
 }
 function gameTable(g) {
@@ -1560,7 +1623,7 @@ function room() {
     closure+again+'<div class="room-layout'+(dock?' has-dock':'')+(tab==='play'&&!s.spectator&&seatHasTurn(s,s.side)&&!pending?' your-turn':'')+'">'+
     '<div id="tabpanel" role="tabpanel" aria-labelledby="tab-'+tab+'">'+(tab==='rules'?rules(g.id,tabChanged):
     '<div class="match"'+(elapsedStyle()?' style="'+elapsedStyle()+'"':'')+'>'+
-    '<div class="banner-row"><div class="banner '+tone+'" role="status"><i></i>'+escape(wording)+'</div>'+(cards&&g.id!=='memory'?cardTools(g):'')+'</div>'+
+    '<div class="banner-row"><div class="banner '+tone+'" role="status"><i></i>'+escape(wording)+'</div>'+(g.id==='chess'?chessStyleButton(s,connected):cards&&g.id!=='memory'?cardTools(g):'')+'</div>'+
     pass+turnNotes(s,acting()).map(note=>'<p class="subnote turn-note" role="status">'+escape(note)+'</p>').join('')+
     (cards?board:around?'<div class="duel"><div class="players top">'+plate(1-s.side)+'</div><div class="duel-board">'+board+'</div><div class="players bottom">'+plate(s.side)+'</div></div>':
       '<div class="players">'+Array.from({length:capacity},(_,i)=>plate(i)).join('')+'</div>'+board)+
@@ -1695,7 +1758,7 @@ function playCell(i) {
   if(compatible.length) {
     if(chess&&path.length===2) {
       if(compatible.length===1) send(compatible[0]);
-      else showModal('<h2>Promuovi il pedone</h2><div class="promotion">'+compatible.map(m=>'<button class="outline" data-promote="'+m.promote+'"><span class="glyph" aria-hidden="true">'+glyph[m.promote]+'</span>'+pieceLabel[m.promote]+'</button>').join('')+'</div>');
+      else showModal('<h2>Promuovi il pedone</h2><div class="promotion">'+compatible.map(m=>'<button class="outline" data-promote="'+m.promote+'">'+pieceHtml(state.side===0?m.promote.toUpperCase():m.promote)+pieceLabel[m.promote]+'</button>').join('')+'</div>');
       return;
     }
     if(!chess&&compatible[0].path.length===path.length){send({path});return;}
@@ -2000,6 +2063,7 @@ app.addEventListener('click',async e=>{
   if(ignoreClick)return;
   const b=e.target.closest('button');if(!b)return;
   const d=b.dataset;
+  if(d.action==='chess-style'){openChessPicker();return;}
   if(d.memory!==undefined) {
     if(acting()&&b.getAttribute('aria-disabled')==='false')send({at:Number(d.memory)});
     return;
@@ -2120,6 +2184,7 @@ app.addEventListener('click',async e=>{
 });
 modal.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.chooseStyle){chooseChessStyle(b);return;}
   if(b.dataset.unoColor&&selectedCard&&acting()) {modal.close();send({card:selectedCard,color:b.dataset.unoColor});}
   if(b.dataset.promote) {
     const move=game().moves.find(m=>m.from===prefix[0]&&m.promote===b.dataset.promote&&m.to===promotionTarget);

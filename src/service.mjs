@@ -1,8 +1,8 @@
-import { create, join, submit, snapshot, chat, renameSeat, playBot, spectator, sessionLifetime, advanceRoomClock } from './room.mjs';
+import { create, join, submit, snapshot, chat, changeChessStyle, renameSeat, playBot, spectator, sessionLifetime, advanceRoomClock } from './room.mjs';
 import { parseChat } from '../public/chat-format.mjs';
 import { version } from '../public/version.mjs';
 
-export const route = /^\/api\/rooms\/([a-f0-9]{24})(?:\/(join|moves|live|events|chat|nickname|bot))?$/;
+export const route = /^\/api\/rooms\/([a-f0-9]{24})(?:\/(join|moves|live|events|chat|chess-style|nickname|bot))?$/;
 export const validToken = token => typeof token==='string' && /^[a-f0-9]{64}$/.test(token);
 export const answer = (body,status=200) => Response.json(body,{status,headers:{'Cache-Control':'no-store'}});
 // Client settings plus the release shown in the header. `updated` is when the core last changed.
@@ -51,6 +51,7 @@ export async function handle(request, operation, read, commit) {
     }
     else if(request.method==='POST' && operation==='moves') changed=submit(room,token,data);
     else if(request.method==='POST' && operation==='chat') changed=chat(room,token,data);
+    else if(request.method==='POST' && operation==='chess-style') changed=changeChessStyle(room,token,data);
     else if(request.method==='POST' && operation==='bot') changed=playBot(room,token,data);
     else if(!(!operation && ['GET','POST'].includes(request.method))) return answer({error:'Operazione non disponibile.'},405);
     // `?guarda` reads the room as a spectator: no seat is needed and nothing can be changed.

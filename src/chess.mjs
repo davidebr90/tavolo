@@ -116,6 +116,39 @@ export function chessNotation(s,move,legal,inCheck,mate) {
   return (piece==='p'?'':piece.toUpperCase())+origin+(capture?'x':'')+file(move.to)+rank(move.to)+
     (move.promote?'='+move.promote.toUpperCase():'')+suffix;
 }
+function capturedPiece(s,m) {
+  return s.board[m.ep?(m.from&~7)+m.to%8:m.to];
+}
+// Older rooms only stored SAN. Replay a complete score to recover the actual
+// victims, including promoted pieces. A partial score has no known starting board.
+function replayCaptures(history,game) {
+  let replay=chessStart();
+  const taken=[];
+  for(const entry of history) {
+    const san=entry.san.replace(/[+#]$/,'');
+    const legal=chessMoves(replay);
+    const move=legal.find(m=>chessNotation(replay,m,legal,false,false)===san);
+    if(!move)return null;
+    taken.push(capturedPiece(replay,move));
+    replay=apply(replay,move);
+  }
+  return replay.turn===game.turn&&replay.board.every((p,i)=>p===game.board[i])?taken:null;
+}
+const legacyCaptures=new Map();
+export function chessHistory(s) {
+  const history=s.history??[];
+  if(!history.some(entry=>!entry.captured&&entry.san.includes('x'))||
+    !history.every((entry,i)=>entry.ply===i+1))return history;
+  // Views for players, spectators and reconnects can read the same legacy room
+  // before its next move persists the upgraded history.
+  const key=[s.board.map(p=>p||'.').join(''),s.turn,...history.map(entry=>entry.san)].join(' ');
+  if(!legacyCaptures.has(key)) {
+    if(legacyCaptures.size>=16)legacyCaptures.delete(legacyCaptures.keys().next().value);
+    legacyCaptures.set(key,replayCaptures(history,s));
+  }
+  const taken=legacyCaptures.get(key);
+  return taken?history.map((entry,i)=>taken[i]&&!entry.captured?{...entry,captured:taken[i]}:entry):history;
+}
 function dead(board) {
   const pieces=board.flatMap((p,i)=>p && p.toLowerCase()!=='k' ? [[p.toLowerCase(),(i%8+(i>>3))%2]] : []);
   return pieces.length===0 || (pieces.length===1 && 'bn'.includes(pieces[0][0])) ||
@@ -137,7 +170,8 @@ export function chessPlay(s, action) {
   const inCheck=checked(next.board,next.turn);
   const last=s.history?.at(-1);
   const ply=last?last.ply+1:Object.values(s.seen).reduce((sum,n)=>sum+n,0);
-  next.history=[...(s.history??[]),{ply,san:chessNotation(s,m,legal,inCheck,inCheck&&!moves.length)}];
+  const captured=capturedPiece(s,m);
+  next.history=[...chessHistory(s),{ply,san:chessNotation(s,m,legal,inCheck,inCheck&&!moves.length),...(captured?{captured}:{})}];
   return next;
 }
 // The computer player searches positions without the bookkeeping of a played move.

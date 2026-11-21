@@ -6,6 +6,8 @@ In **Memory · Atlante degli uccelli** da due a quattro giocatori cercano dodici
 
 ## Gioca a Tavolo
 
+Negli **Scacchi** il pulsante **Stile scacchi** cambia insieme la scacchiera e i pezzi per tutta la stanza. Entrambi i giocatori possono scegliere Classico, Intarsio, Art Déco o Nordico anche durante il turno dell’altro. Nel pannello **Mosse**, le due colonne distinguono Bianco e Nero e una piccola figura accanto alla notazione indica il pezzo catturato.
+
 Crea una stanza, copia il link d'invito e mandalo agli altri giocatori. Se vuoi giocare subito, scegli **Computer** sulla scheda del gioco. In **Partite in corso** trovi le stanze, i nickname e il turno. Per giocare online serve un'istanza di Tavolo pubblicata come indicato sotto.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fdavidebr90%2Ftavolo)
