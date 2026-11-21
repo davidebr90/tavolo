@@ -1,4 +1,4 @@
-import { chessStart, chessMoves, chessPlay, checked, canClaimDraw } from './chess.mjs';
+import { chessStart, chessMoves, chessPlay, chessHistory, checked, canClaimDraw } from './chess.mjs';
 import { startCards, playCards, viewCards } from './cards.mjs';
 import { startBriscola, playBriscola, viewBriscola } from './briscola.mjs';
 import { startMemory, playMemory, viewMemory } from './memory.mjs';
@@ -201,8 +201,9 @@ export function view(s,side) {
   const {id,turn,result,last,board}=s;
   if(id==='naval') return {id,turn,result,last,size:s.size??10,lengths:s.lengths??lengths,ready:s.fleets.map(Boolean),mine:s.fleets[side],incoming:s.shots[1-side],outgoing:s.shots[side]};
   const output={id,turn,result,last,board,moves:turn===side?available(s):[]};
-  if(id==='chess'||id==='dama')output.history=s.history??[];
+  if(id==='dama')output.history=s.history??[];
   if(id==='chess') {
+    output.history=chessHistory(s);
     output.check=checked(board,turn);
     output.canDraw=turn===side&&canClaimDraw(s,output.moves);
   }

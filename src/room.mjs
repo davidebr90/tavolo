@@ -2,6 +2,7 @@ import { start, play, view } from './games.mjs';
 import { coverMemory } from './memory.mjs';
 import { botAction, anyAction, botName } from './bots.mjs';
 import { parseChat } from '../public/chat-format.mjs';
+import { chessStyleIds, defaultChessStyle } from '../public/chess-style-ids.mjs';
 // A room lives for a week after its last move, join or message.
 export const sessionLifetime=7*24*60*60*1000;
 const capacity=room=>room.game.playerCount??room.game.hands?.length??2;
@@ -93,6 +94,17 @@ function seat(room,token) {
   const side=room.players.findIndex(p=>p.token===token);
   if(side<0) throw new Error('Accesso alla stanza non valido.');
   return side;
+}
+const initialChessStyle=Object.freeze({id:defaultChessStyle,revision:0,author:null});
+export function changeChessStyle(room,token,data) {
+  const player=room.players[seat(room,token)];
+  if(room.game.id!=='chess'||room.closed||!human(player))throw Error('Lo stile può essere cambiato da un giocatore in una stanza di scacchi aperta.');
+  if(!chessStyleIds.includes(data?.id)||!Number.isSafeInteger(data.revision)||data.revision<0)throw Error('Stile della scacchiera non valido.');
+  const current=room.chessStyle??initialChessStyle;
+  if(current.id===data.id)return false;
+  if(current.revision!==data.revision)throw Error('Lo stile è già cambiato. Scegli di nuovo.');
+  room.chessStyle={id:data.id,revision:current.revision+1,author:player.name};
+  return true;
 }
 export function join(room,name,token,markup) {
   if(room.players.some(p=>p.token===token)) return false;
@@ -187,6 +199,7 @@ export function snapshot(room,token) {
     if('playable' in game)game.playable=[];
   }
   return {side,maxPlayers,players:room.players.map(p=>p.name),playerMarkup:room.players.map(p=>p.markup??null),version:room.version,game,chat:room.chat??[],chatVersion:room.chatVersion??0,
+    ...(game.id==='chess'?{chessStyle:room.chessStyle??initialChessStyle}:{}),
     roomName:room.roomName??null,createdAt:room.createdAt??null,rematch:room.rematch??[],games:room.games??1,
     bots:room.players.map(p=>p.bot===true),level:room.level??null,botTurn:botTurn(room),...(watching?{spectator:true}:{}),
     closed:room.closed===true,closeRequest:room.closeRequest??null,

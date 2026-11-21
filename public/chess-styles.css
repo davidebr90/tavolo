@@ -1,0 +1,72 @@
+/* A sample and a live frame use the same square finish. Pieces carry their own
+   palette so the board, capture log, dragged piece and flight all match. */
+[data-chess-style="classico"] {
+  --sq-light:#ecdab9;--sq-dark:#a37652;
+  --sq-finish:linear-gradient(120deg,#fff2,transparent 72%);
+  --board-edge:#372719;--board-inlay:#bf9462;--board-letter:#f3d6a4;
+  --board-finish:repeating-linear-gradient(96deg,#fff1 0 1px,transparent 1px 7px),linear-gradient(140deg,#62452c,#342417);
+  --move-tint:#ffd17088;--move-line:#965816;
+  --ivory:#fff5dd;--ivory-outline:#49372d;--ivory-etch:#81674d;
+  --ebony:#2e2622;--ebony-outline:#f3d6b0;--ebony-etch:#d1ac7e;
+}
+[data-chess-style="intarsio"] {
+  --sq-light:#e6debc;--sq-dark:#768569;
+  --sq-finish:repeating-linear-gradient(44deg,#fff1 0 1px,transparent 1px 8px),linear-gradient(160deg,#fff1,transparent 60%);
+  --board-edge:#31271d;--board-inlay:#cbad77;--board-letter:#f5e6bd;
+  --board-finish:repeating-linear-gradient(135deg,#81694433 0 3px,transparent 3px 10px),linear-gradient(150deg,#675135,#342b20);
+  --move-tint:#f7c46990;--move-line:#865117;
+  --ivory:#ffe6b3;--ivory-outline:#53422d;--ivory-etch:#81623c;
+  --ebony:#582d32;--ebony-outline:#f5d59f;--ebony-etch:#e6b684;
+}
+[data-chess-style="art-deco"] {
+  --sq-light:#dfdfc7;--sq-dark:#548480;
+  --sq-finish:linear-gradient(130deg,#fff1,transparent 58%);
+  --board-edge:#102c30;--board-inlay:#d4b273;--board-letter:#fae3a9;
+  --board-finish:repeating-linear-gradient(45deg,transparent 0 6px,#9fb8ae14 6px 7px,transparent 7px 10px),linear-gradient(130deg,#31504a,#142f33);
+  --move-tint:#f1c6769c;--move-line:#775520;
+  --ivory:#ffe5a9;--ivory-outline:#47402d;--ivory-etch:#886326;
+  --ebony:#19363d;--ebony-outline:#e7ce93;--ebony-etch:#e7be71;
+}
+[data-chess-style="nordico"] {
+  --sq-light:#e5edf1;--sq-dark:#91a8bb;
+  --sq-finish:none;
+  --board-edge:#263b50;--board-inlay:#91a9ba;--board-letter:#e3eff5;
+  --board-finish:linear-gradient(145deg,#3e5264,#27394a);
+  --move-tint:#78dfde9c;--move-line:#176869;
+  --ivory:#fcfdf3;--ivory-outline:#354859;--ivory-etch:#748a99;
+  --ebony:#2e3550;--ebony-outline:#dfecef;--ebony-etch:#bccede;
+}
+.chess-frame[data-chess-style] {
+  background:var(--board-finish);
+  box-shadow:0 25px 48px -30px #000c,inset 0 1px 0 #fff4,inset 0 -2px 0 #0005;
+}
+.chess-frame[data-chess-style] .chess-ruler {color:var(--board-letter)}
+.chess-frame[data-chess-style]>.chess {box-shadow:0 0 0 2px var(--board-edge),0 0 0 3px var(--board-inlay)}
+.chess-frame[data-chess-style="intarsio"] {border-radius:10px}
+.chess-frame[data-chess-style="art-deco"] {border:1px solid var(--board-inlay);border-radius:4px}
+.chess-frame[data-chess-style="nordico"] {border-radius:10px}
+.chess-frame[data-chess-style] .chess .light,.chess-sample[data-chess-style] .sample-light {background-color:var(--sq-light);background-image:var(--sq-finish)}
+.chess-frame[data-chess-style] .chess .dark,.chess-sample[data-chess-style] .sample-dark {background-color:var(--sq-dark);background-image:var(--sq-finish)}
+.chess-frame[data-chess-style] .chess .cell.last {
+  background-image:linear-gradient(var(--move-tint),var(--move-tint)),var(--sq-finish);
+}
+.chess-frame[data-chess-style] .chess .cell.selected,
+.chess-frame[data-chess-style] .chess .cell.drop-preview {
+  box-shadow:inset 0 0 0 3px var(--move-line),inset 0 0 0 4px #ffedbf;
+}
+.chess-frame[data-chess-style] .chess .cell:focus-visible {outline:3px solid var(--board-edge);outline-offset:-4px}
+.chess-piece[data-chess-style] {
+  display:inline-grid;place-items:center;
+  width:1em;height:1em;line-height:1;pointer-events:none;
+  vertical-align:middle;text-shadow:none;filter:none;
+}
+.chess-piece[data-chess-style] svg {display:block;width:100%;height:100%;overflow:visible}
+.chess-piece[data-chess-style].white {--body:var(--ivory);--rim:var(--ivory-outline);--carve:var(--ivory-etch)}
+.chess-piece[data-chess-style].black {--body:var(--ebony);--rim:var(--ebony-outline);--carve:var(--ebony-etch)}
+.chess-shape {fill:var(--body);stroke:var(--rim);stroke-width:1.65;stroke-linejoin:round}
+.chess-engraving {fill:none;stroke:var(--carve);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.chess-piece[data-chess-style="art-deco"] .chess-shape {stroke-linejoin:bevel}
+.chess-piece[data-chess-style="nordico"] .chess-engraving {stroke-width:2.15}
+.chess .cell>.chess-piece[data-chess-style],.piece-ghost>.chess-piece[data-chess-style],.fx-ghost>.chess-piece[data-chess-style] {
+  width:82%;height:90%;filter:drop-shadow(0 1.5px 1px #15202255);
+}
