@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { route, answer, handle, validToken, settings } from './service.mjs';
-import { snapshot, sessionLifetime } from './room.mjs';
+import { snapshot, spectator, sessionLifetime } from './room.mjs';
 import { handleProfile, profileId, profileLifetime, validProfileKey } from './profiles.mjs';
 
 export default {
@@ -63,7 +63,7 @@ export class GameRoom extends DurableObject {
     for(const socket of this.ctx.getWebSockets()) socket.close(1000,'Stanza scaduta');
   }
   webSocketMessage(socket,token) {
-    if(socket.deserializeAttachment() || !validToken(token)) {
+    if(socket.deserializeAttachment() || !(validToken(token) || token===spectator)) {
       socket.close(1008,'Accesso non valido');
       return;
     }

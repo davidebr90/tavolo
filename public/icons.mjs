@@ -13,7 +13,11 @@ const paths={
   redo:'M20 10a8 8 0 1 0-2 8m2-14v6h-6',
   draw:'M4 9h16M4 15h16',
   plus:'M12 4v16M4 12h16',
-  enter:'M11 4h9v16h-9m-7-8h12m-4-4 4 4-4 4'
+  enter:'M11 4h9v16h-9m-7-8h12m-4-4 4 4-4 4',
+  cpu:'M8 8h8v8H8zM5 5h14v14H5zM9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3',
+  eye:'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  sound:'M4 9v6h4l5 4V5L8 9zM16.5 9a4 4 0 0 1 0 6m2.5-9a8 8 0 0 1 0 12',
+  mute:'M4 9v6h4l5 4V5L8 9zM17 9l5 6m0-6-5 6'
 };
 export function icon(name) {
   return '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="'+paths[name]+'"/></svg>';

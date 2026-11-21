@@ -155,3 +155,5 @@ export function strategyView(s,side) {
   if(s.id==='backgammon')view.moves=s.turn===side&&s.result===null?bgLegal(s):[];
   return view;
 }
+// Building blocks for the computer player.
+export { group as goGroup, goPlacement, bgSteps, bgApply, bgLegal };

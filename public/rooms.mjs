@@ -32,7 +32,7 @@ export function chatEntries(state) {
   return chat.map((message,index)=>({...message,sequence:offset+index+1}));
 }
 export function unreadChat(state,cursor=0) {
-  return chatEntries(state).filter(message=>message.side!==state.side&&message.sequence>cursor);
+  return chatEntries(state).filter(message=>(state.spectator||message.side!==state.side)&&message.sequence>cursor);
 }
 export function roomTransport(config) {
   return ['sse','poll'].includes(config?.transport)?'poll':'ws';

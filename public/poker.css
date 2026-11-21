@@ -88,8 +88,8 @@
   .poker-table .felt-side.right{justify-content:flex-start}
   .poker-table .seat-stack{display:none}
   /* The dealer button keeps clear of the name plates crowding the corners. */
-  .poker-table .turn-chip{left:calc(50% + var(--cx) * .66%)}
-  .poker-table .seat:not(.me) :is(.seat-info strong,.stack-unit){display:none}
+  .poker-table .turn-chip{left:calc(50% + var(--cx) * .66%);top:calc(50% + var(--cy) * 1.2%)}
+  .poker-table .seat:not(.me) :is(.seat-info strong,.stack-unit,.stack-status){display:none}
   .poker-table .seat:not(.me) .seat-plate{padding-right:10px;gap:6px}
   .poker-table .seat-info small{font-size:.74rem}
   .poker-table .seat-cards .pile-back{width:17px;height:24px}

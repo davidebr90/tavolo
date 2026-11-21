@@ -1,10 +1,10 @@
 # Tavolo
 
-Quindici giochi multiplayer con invito tramite link. La sala carte comprende Scopa e Scopone scientifico, UNO, Briscola, Poker italiano e Poker Texas Hold’em. Gli altri tavoli sono Scacchi, Battaglia navale, Forza 4, Reversi, Tris, Dama italiana, Backgammon, Go, Nim e Punti e quadrati. Ogni stanza include la scheda **Regole**, la chat e il ripristino della partita.
+Quindici giochi da fare con gli amici tramite link, oppure contro il computer. La sala carte comprende Scopa e Scopone scientifico, UNO, Briscola, Poker italiano e Poker Texas Hold’em. Gli altri tavoli sono Scacchi, Battaglia navale, Forza 4, Reversi, Tris, Dama italiana, Backgammon, Go, Nim e Punti e quadrati. Ogni stanza include la scheda **Regole**, la chat e il ripristino della partita.
 
 ## Gioca a Tavolo
 
-Crea una stanza, copia il link d'invito e mandalo agli altri giocatori. In **Partite in corso** trovi le stanze, i nickname e il turno. Per giocare online serve un'istanza di Tavolo pubblicata come indicato sotto.
+Crea una stanza, copia il link d'invito e mandalo agli altri giocatori. Se vuoi giocare subito, scegli **Computer** sulla scheda del gioco. In **Partite in corso** trovi le stanze, i nickname e il turno. Per giocare online serve un'istanza di Tavolo pubblicata come indicato sotto.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fdavidebr90%2Ftavolo)
 
@@ -50,6 +50,26 @@ Da **Home → Partite in corso** puoi controllare e riprendere più stanze. **Ch
 
 Ogni stanza mantiene gli ultimi 50 messaggi, con un massimo di 280 caratteri per messaggio. La stanza scade dopo 7 giorni senza mosse, ingressi o messaggi. A partita conclusa compare **Rivincita**: quando tutti i giocatori la chiedono, nella stessa stanza parte una nuova partita e i posti ruotano, così apre chi prima muoveva per secondo. Il server locale rimuove i file scaduti e il Worker pianifica la rimozione della riga di stato.
 
+## Contro il computer
+
+Ogni gioco si può giocare contro il computer. Nella finestra di creazione scegli quanti posti affidargli e il livello: facile, normale o difficile. Nei giochi a più posti puoi mescolare persone e computer, per esempio un tavolo di poker da sei con due amici e tre computer.
+
+- Il computer gioca sul server e vede solo ciò che vedrebbe una persona a quel posto: non conosce le carte degli altri né la flotta avversaria.
+- Scacchi, Dama, Reversi e Forza 4 cercano la mossa migliore qualche mossa in avanti. Nim e Tris, al livello difficile, non sbagliano. Go gioca da principiante.
+- A carte e a Battaglia navale segue le regole pratiche di un buon giocatore: a Scopa conta denari, sette e scope, a Briscola dosa carichi e briscole, a poker stima le probabilità della propria mano.
+- Le sue mosse arrivano quando chi è al tavolo le chiede, con una breve pausa, così le animazioni restano leggibili. Anche da **Partite in corso** le stanze contro il computer avanzano da sole fino al tuo turno.
+- La rivincita parte subito e la stanza si chiude senza chiedere conferma, perché non c'è nessun altro da aspettare.
+
+Le strategie sono in `src/bots.mjs`. Se l'host concede pochissimo tempo di calcolo, il client chiede una risposta più rapida e il computer gioca più semplice invece di fermarsi.
+
+## Spettatori
+
+Chi apre il link di una stanza può scegliere **Guarda soltanto**. Dalla stanza, il pulsante **Spettatori** copia un link che apre direttamente la partita in sola lettura. Chi guarda vede tavolo, mosse e chat, ma non le carte in mano ai giocatori né le flotte, e non può muovere né scrivere.
+
+## Suoni
+
+Carte, fiches, pedine, dadi e colpi in mare hanno un suono, generato dal browser senza scaricare file. Il pulsante con l'altoparlante in alto li spegne e la scelta resta su questo dispositivo. I suoni partono solo dopo il primo clic o tasto, come richiedono i browser.
+
 ## Verifica
 
 ```powershell
@@ -78,6 +98,8 @@ Scacchi riconosce le comuni posizioni di materiale insufficiente. La richiesta d
 - `public/` contiene lobby, interfaccia di partita, schede Regole ed effetti animati.
 - `src/games.mjs` definisce il contratto dei giochi e i motori. Scacchi ha un modulo dedicato.
 - `src/room.mjs` gestisce posti, turni, versioni e ricevute.
+- `src/bots.mjs` contiene i giocatori al computer.
+- `public/sound.mjs` genera i suoni del tavolo.
 - `src/worker.mjs` e `wrangler.jsonc` descrivono il deployment gestito.
 - `dev.mjs` avvia la versione locale.
 ## Versione

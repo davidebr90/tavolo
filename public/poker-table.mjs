@@ -57,7 +57,7 @@ export function pokerTable(room,{active,escape,selected,raiseTo,tableSeats}) {
       if(!occupied)return 'Posto libero';
       const stack=waiting?g.stacks[seat]+g.contributions[seat]:g.stacks[seat];
       const status=waiting?'':!g.handCounts[seat]&&!done?'Eliminato':done?(showdown?.labels?.[seat]??(winners.has(seat)?'Vince il piatto':'')):g.folded[seat]?'Lascia':stack===0?'All-in':'';
-      return '<b class="stack-amount">'+stack+'</b><span class="stack-unit"> fiches</span>'+(status?' · '+escape(status):'')+(!waiting&&g.dealer===seat?'<span class="sr-only"> · mazziere</span>':'');
+      return '<b class="stack-amount">'+stack+'</b><span class="stack-unit"> fiches</span>'+(status?'<span class="stack-status"> · '+escape(status)+'</span>':'')+(!waiting&&g.dealer===seat?'<span class="sr-only"> · mazziere</span>':'');
     },
     // Each player's chips stand on their own place at the rail.
     badge:({seat,occupied})=>occupied&&!waiting?'<span class="seat-stack" data-stack="'+seat+'">'+chipPile(g.stacks[seat],'mini')+'</span>':'',

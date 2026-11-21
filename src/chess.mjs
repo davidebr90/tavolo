@@ -140,3 +140,5 @@ export function chessPlay(s, action) {
   next.history=[...(s.history??[]),{ply,san:chessNotation(s,m,legal,inCheck,inCheck&&!moves.length)}];
   return next;
 }
+// The computer player searches positions without the bookkeeping of a played move.
+export { apply as chessApply };

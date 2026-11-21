@@ -338,3 +338,6 @@ export function viewPoker(s,side) {
   return {id,turn,result,last,round,dealer,phase,board,stacks,bets,contributions,folded,showdown,openingRank,
     hand:s.hands[side],handCounts:s.hands.map(hand => hand.length),pot:total(contributions),legal:legalActions(s,side)};
 }
+
+// Hand ranking for the computer player.
+export { five as pokerHand, compare as compareHands };

@@ -1,11 +1,54 @@
 import { start, play, view } from './games.mjs';
+import { botAction, anyAction, botName } from './bots.mjs';
 import { parseChat } from '../public/chat-format.mjs';
 // A room lives for a week after its last move, join or message.
 export const sessionLifetime=7*24*60*60*1000;
 const capacity=room=>room.game.hands?.length??2;
+// Anyone may watch a room with this in place of a seat token.
+export const spectator='guarda';
+const human=player=>!player.bot;
+// The computer seat that has to act now, or -1.
+export function botTurn(room) {
+  const g=room.game;
+  if(room.closed||g.result!==null||room.players.length<capacity(room))return -1;
+  if(g.id==='naval'&&!g.fleets.every(Boolean))return room.players.findIndex((player,side)=>player.bot&&!g.fleets[side]);
+  return room.players[g.turn]?.bot?g.turn:-1;
+}
+// Computer players place their fleet as soon as they sit down.
+function settleBots(room) {
+  if(room.game.id!=='naval')return;
+  room.players.forEach((player,side)=>{
+    if(player.bot&&!room.game.fleets[side])room.game=play(room.game,anyAction(room.game,side),side);
+  });
+}
 export function create(game,name,token,options,markup,roomName) {
   const createdAt=Date.now();
-  return {game:start(game,options),players:[{name,token,markup}],version:0,receipts:{},roomName,options:options??null,createdAt,updatedAt:createdAt};
+  const room={game:start(game,options),players:[{name,token,markup}],version:0,receipts:{},roomName,options:options??null,createdAt,updatedAt:createdAt};
+  const bots=options?.bots??0, level=options?.level??1;
+  if(!Number.isInteger(bots)||bots<0||bots>=capacity(room)||![0,1,2].includes(level))throw Error('Configurazione dei giocatori al computer non valida.');
+  if(bots) {
+    room.level=level;
+    for(let i=0;i<bots;i++)room.players.push({name:botName(i,bots),token:null,bot:true});
+    settleBots(room);
+  }
+  return room;
+}
+// A seated person wakes the computer when it is its turn. Whoever asks first gets the move;
+// a request about an older position changes nothing.
+export function playBot(room,token,message) {
+  seat(room,token);
+  const side=botTurn(room);
+  if(message?.version!==room.version||side<0)return false;
+  const moved=movedSeats(room);
+  let next;
+  try {next=play(room.game,botAction(room.game,side,{level:room.level,quick:message.quick===true}),side);}
+  catch {next=play(room.game,anyAction(room.game,side),side);}
+  room.game=next;
+  room.moved=moved;
+  room.moved[side]=true;
+  if(room.game.result!==null)room.closeRequest=null;
+  room.version++;
+  return true;
 }
 // Options to start the same kind of game again, also for rooms created before they were stored.
 function restartOptions(room) {
@@ -20,7 +63,7 @@ function rematch(room,side) {
   if(room.closed||room.game.result===null) throw Error('La rivincita è disponibile a partita conclusa.');
   const asked=new Set(room.rematch??[]);
   asked.add(side);
-  if(asked.size<room.players.length) {room.rematch=[...asked].sort();return false;}
+  if(asked.size<room.players.filter(human).length) {room.rematch=[...asked].sort();return false;}
   const seats=room.players.length;
   room.players.push(room.players.shift());
   for(const message of room.chat??[]) message.side=(message.side+seats-1)%seats;
@@ -29,6 +72,7 @@ function rematch(room,side) {
   room.moved=room.players.map(()=>false);
   room.closeRequest=null;
   room.games=(room.games??1)+1;
+  settleBots(room);
   return true;
 }
 function seat(room,token) {
@@ -64,7 +108,7 @@ function movedSeats(room) {
 function closeRoom(room,side,command) {
   if(command==='request') {
     if(room.closeRequest!=null) throw Error('C’è già una richiesta di chiusura.');
-    if(!room.moved.some((value,i)=>value&&i!==side)) room.closed=true;
+    if(!room.moved.some((value,i)=>value&&i!==side&&human(room.players[i]))) room.closed=true;
     else room.closeRequest=side;
     return;
   }
@@ -106,8 +150,15 @@ export function submit(room,token,message) {
   return true;
 }
 export function snapshot(room,token) {
-  const side=seat(room,token);
+  // A spectator looks from the first seat and is shown nothing that seat keeps to itself.
+  const watching=token===spectator, side=watching?0:seat(room,token);
   const maxPlayers=capacity(room), game=view(room.game,side);
+  if(watching) {
+    if(Array.isArray(game.hand))game.hand=[];
+    for(const [key,empty] of [['moves',[]],['takes',{}],['playable',[]],['legal',{}],['mine',null]])if(key in game)game[key]=empty;
+    if('drawn' in game)game.drawn=false;
+    if('canDraw' in game)game.canDraw=false;
+  }
   if(room.players.length<maxPlayers&&Array.isArray(game.hand)) {
     // A seat sees the intact pack until the last player joins.
     game.awaitingDeal=true;
@@ -124,7 +175,9 @@ export function snapshot(room,token) {
   }
   return {side,maxPlayers,players:room.players.map(p=>p.name),playerMarkup:room.players.map(p=>p.markup??null),version:room.version,game,chat:room.chat??[],chatVersion:room.chatVersion??0,
     roomName:room.roomName??null,createdAt:room.createdAt??null,rematch:room.rematch??[],games:room.games??1,
-    closed:room.closed===true,closeRequest:room.closeRequest??null,requiresConsent:movedSeats(room).some((value,i)=>value&&i!==side)};
+    bots:room.players.map(p=>p.bot===true),level:room.level??null,botTurn:botTurn(room),...(watching?{spectator:true}:{}),
+    closed:room.closed===true,closeRequest:room.closeRequest??null,
+    requiresConsent:!watching&&movedSeats(room).some((value,i)=>value&&i!==side&&human(room.players[i]))};
 }
 export function chat(room,token,data) {
   const side=seat(room,token), text=typeof data?.text==='string'?data.text.trim():'';

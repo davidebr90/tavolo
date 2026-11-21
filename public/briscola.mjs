@@ -8,14 +8,15 @@ const pointsLabel=n=>n+(n===1?' punto':' punti');
 
 // Briscola at the oval table: the stock with the trump card under it on the left, the trick
 // in the middle, each side's tricks and points on the right, players around the rail.
-export function renderBriscola(g,{side,players,deck,cardHints,active,playingCard,tableSeats,tiltOf}) {
-  const count=g.handCounts.length, team=side%2, last=g.previousTrick;
+export function renderBriscola(g,{side,players,deck,cardHints,active,playingCard,tableSeats,tiltOf,watching=false}) {
+  // A spectator looks from the first seat but is nobody at the table.
+  const count=g.handCounts.length, team=side%2, last=g.previousTrick, me=watching?-1:side;
   const totalTricks=40/count, waiting=players.length<count;
-  const seatName=seat=>seat===side?'Tu':renderChatMessage({text:players[seat]??('Posto '+(seat+1)),format:'plain'});
+  const seatName=seat=>seat===me?'Tu':renderChatMessage({text:players[seat]??('Posto '+(seat+1)),format:'plain'});
   const tilt=card=>'--tilt:'+tiltOf(card)+'deg';
   const scores=[1-team,team].map(id=>{
     const mine=id===team, tricks=g.trickCounts[id];
-    const label=count===4?(mine?'La tua squadra':'Squadra avversaria'):mine?'Le tue prese':'Prese avversarie';
+    const label=watching?(count===4?'Squadra '+(id+1):'Prese di '+seatName(id)):count===4?(mine?'La tua squadra':'Squadra avversaria'):mine?'Le tue prese':'Prese avversarie';
     return '<div class="team-zone '+(mine?'mine':'theirs')+' seat-'+id+'"><div class="table-pile pile-inspect" data-pile="'+id+'"><span class="capture-art"><i class="pile-back briscola" '+(tricks?'':'hidden')+'></i></span>'+
       '<span>'+label+' <b>'+pointsLabel(g.scores[id])+'</b><small>'+tricks+(tricks===1?' presa':' prese')+'</small></span></div></div>';
   });
@@ -29,15 +30,15 @@ export function renderBriscola(g,{side,players,deck,cardHints,active,playingCard
     (cardHints?' · '+cardName(card):'')+'</small></span>').join('');
   let outcome='';
   if (last) {
-    const who=last.winner===side?'Hai preso':seatName(last.winner)+' ha preso';
+    const who=last.winner===me?'Hai preso':seatName(last.winner)+' ha preso';
     outcome=who+' '+pointsLabel(last.points)+'.';
-    if (completed&&g.remaining) outcome+=last.winner===side?' Hai pescato per primo.':' Ha pescato per primo.';
+    if (completed&&g.remaining) outcome+=last.winner===me?' Hai pescato per primo.':' Ha pescato per primo.';
     if (completed&&last.number===totalTricks-3) {
       const trumpSeat=(last.winner+count-1)%count;
-      outcome+=' '+(trumpSeat===side?'Hai pescato':seatName(trumpSeat)+' ha pescato')+' la briscola scoperta.';
+      outcome+=' '+(trumpSeat===me?'Hai pescato':seatName(trumpSeat)+' ha pescato')+' la briscola scoperta.';
     }
   }
-  const opening=waiting?'':g.turn===side?'Apri la presa con una carta.':seatName(g.turn)+' apre la presa.';
+  const opening=waiting?'':g.turn===me?'Apri la presa con una carta.':seatName(g.turn)+' apre la presa.';
   const label=waiting?'In attesa della distribuzione':'Presa '+trickNumber+' di '+totalTricks+' · Briscola di <b>'+suitOf(g.trumpCard)+'</b>';
   const n=g.hand.length;
   const hand=g.hand.map((card,i)=>{
