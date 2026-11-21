@@ -375,7 +375,17 @@ input[type=checkbox]{width:17px;height:17px;accent-color:var(--brass)}
 .duel{--board-size:clamp(220px,calc(100dvh - 470px),520px)}
 /* With room beside the board, the opponent sits at its top corner and you at the bottom one. */
 @container match (min-width:560px){
-  .duel{--board-size:clamp(230px,calc(100dvh - 290px),580px);display:grid;grid-template-columns:minmax(140px,230px) minmax(0,auto) minmax(0,230px);grid-template-areas:'top board .' '. board .' 'bottom board .';grid-template-rows:auto 1fr auto;justify-content:center;column-gap:var(--space-4)}
+  /* The board column needs a width of its own: boards size themselves as a share of their
+     column, so a column sized by its content shrinks to nothing around an empty board. It takes
+     the board's width when the table is wide enough, and the room left by the name plates when not. */
+  .duel{--board-size:clamp(230px,calc(100dvh - 290px),580px);--duel-board:var(--board-size);display:grid;
+    grid-template-columns:minmax(140px,230px) minmax(min(var(--duel-board),calc(100cqi - 140px - 2 * var(--space-4))),var(--duel-board)) minmax(0,230px);
+    grid-template-areas:'top board .' '. board .' 'bottom board .';grid-template-rows:auto 1fr auto;justify-content:center;column-gap:var(--space-4)}
+  .duel:has(.board.four){--duel-board:calc(var(--board-size) * 1.04)}
+  .duel:has(.board.tris){--duel-board:min(var(--board-size),330px)}
+  .duel:has(.dots-board){--duel-board:min(calc(var(--board-size) - 32px),360px)}
+  .duel:has(.nim-board){--duel-board:520px}
+  .duel:has(.bg-board){--duel-board:700px}
   .duel .players{width:auto;margin:0}
   .duel .players.top{grid-area:top}
   .duel .players.bottom{grid-area:bottom}
@@ -1082,6 +1092,10 @@ html.holding-piece,html.holding-piece *{cursor:grabbing!important}
   .board.tris,.dots-board{width:min(100%,calc(var(--board-size) * .75))}
   .nim-board{max-width:min(100%,var(--board-size))}
   .bg-board{width:min(100%,calc(var(--board-size) * 1.4))}
+  /* Beside the name plates the column follows these widths too. */
+  .duel:has(.board.tris),.duel:has(.dots-board){--duel-board:calc(var(--board-size) * .75)}
+  .duel:has(.nim-board){--duel-board:min(520px,var(--board-size))}
+  .duel:has(.bg-board){--duel-board:min(700px,calc(var(--board-size) * 1.4))}
 }
 @container match (min-width:1080px){
   .table-side .other-hands:has(>:nth-child(5)){grid-template-columns:repeat(2,minmax(0,1fr))}

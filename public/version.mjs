@@ -1,6 +1,6 @@
 // Release number shown next to the logo. Bump it with every published change.
 // The core update time is not stored here: the server reports it through /api/config.
-export const version='2.5.0';
+export const version='2.5.1';
 
 // Accepts ISO strings and epoch values in seconds or milliseconds.
 export function updatedAt(value) {
