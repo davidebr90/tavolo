@@ -1,9 +1,20 @@
 import { start, play, view } from './games.mjs';
+import { coverMemory } from './memory.mjs';
 import { botAction, anyAction, botName } from './bots.mjs';
 import { parseChat } from '../public/chat-format.mjs';
 // A room lives for a week after its last move, join or message.
 export const sessionLifetime=7*24*60*60*1000;
-const capacity=room=>room.game.hands?.length??2;
+const capacity=room=>room.game.playerCount??room.game.hands?.length??2;
+// The saved deadline also works after a restart. Only the first caller advances
+// the room version and reveals the new turn to its subscribers.
+export function advanceRoomClock(room,now=Date.now()) {
+  if(!room||room.closed||room.game.id!=='memory')return false;
+  const game=coverMemory(room.game,now);
+  if(game===room.game)return false;
+  room.game=game;
+  room.version++;
+  return true;
+}
 // Anyone may watch a room with this in place of a seat token.
 export const spectator='guarda';
 const human=player=>!player.bot;
@@ -11,6 +22,7 @@ const human=player=>!player.bot;
 export function botTurn(room) {
   const g=room.game;
   if(room.closed||g.result!==null||room.players.length<capacity(room))return -1;
+  if(g.id==='memory'&&g.phase==='compare')return -1;
   if(g.id==='naval'&&!g.fleets.every(Boolean))return room.players.findIndex((player,side)=>player.bot&&!g.fleets[side]);
   return room.players[g.turn]?.bot?g.turn:-1;
 }
@@ -56,6 +68,7 @@ function restartOptions(room) {
   const g=room.game;
   if(g.id==='naval')return {size:g.size??10,ships:g.lengths?.length??5};
   if(g.hands)return {players:g.hands.length};
+  if(g.playerCount)return {players:g.playerCount};
   return undefined;
 }
 // Every player must ask. Then the seats rotate, so whoever moved second now moves first.

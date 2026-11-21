@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { route, answer, handle, validToken, settings } from './service.mjs';
-import { snapshot, spectator, sessionLifetime } from './room.mjs';
+import { snapshot, spectator, sessionLifetime, advanceRoomClock } from './room.mjs';
 import { handleProfile, profileId, profileLifetime, validProfileKey } from './profiles.mjs';
 
 export default {
@@ -39,6 +39,15 @@ export class GameRoom extends DurableObject {
       try {socket.send(JSON.stringify(snapshot(room,token)));} catch {try {socket.close(1011,'Sync');} catch {}}
     }
   }
+  nextAlarm(room) {
+    const expires=room.updatedAt+sessionLifetime;
+    return room.closed||room.game.coverAt==null?expires:Math.min(expires,room.game.coverAt);
+  }
+  save(room) {
+    this.sql.exec('INSERT OR REPLACE INTO state (id,json) VALUES (1,?)',JSON.stringify(room));
+    this.ctx.waitUntil(this.ctx.storage.setAlarm(this.nextAlarm(room)));
+    this.publish(room);
+  }
   async fetch(request) {
     const operation=route.exec(new URL(request.url).pathname)?.[2];
     if(operation==='live') {
@@ -48,17 +57,17 @@ export class GameRoom extends DurableObject {
       this.ctx.acceptWebSocket(server);
       return new Response(null,{status:101,webSocket:client});
     }
-    return handle(request,operation,()=>this.read(),room=>{
-      this.sql.exec('INSERT OR REPLACE INTO state (id,json) VALUES (1,?)',JSON.stringify(room));
-      this.ctx.waitUntil(this.ctx.storage.setAlarm(room.updatedAt+sessionLifetime));
-      this.publish(room);
-    });
+    return handle(request,operation,()=>this.read(),room=>this.save(room));
   }
   async alarm() {
     const room=this.read();
     if(!room)return;
     const expires=(room.updatedAt??0)+sessionLifetime;
-    if(expires>Date.now()) {await this.ctx.storage.setAlarm(expires);return;}
+    if(expires>Date.now()) {
+      if(advanceRoomClock(room))this.save(room);
+      else await this.ctx.storage.setAlarm(this.nextAlarm(room));
+      return;
+    }
     this.sql.exec('DELETE FROM state');
     for(const socket of this.ctx.getWebSockets()) socket.close(1000,'Stanza scaduta');
   }
@@ -68,7 +77,9 @@ export class GameRoom extends DurableObject {
       return;
     }
     try {
-      const state=snapshot(this.read(),token);
+      const room=this.read();
+      if(advanceRoomClock(room))this.save(room);
+      const state=snapshot(room,token);
       socket.serializeAttachment(token);
       socket.send(JSON.stringify(state));
     } catch {socket.close(1008,'Accesso non valido');}

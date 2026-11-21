@@ -6,7 +6,7 @@ import {guides} from '../public/guides.mjs';
 import {catalog} from '../public/catalog.mjs';
 
 test('Every game in the catalog has a playable room and a guide',()=>{
-  for(const id of ['briscola','poker-italiano','texas-holdem'])assert.ok(games.includes(id),id);
+  for(const id of ['memory','briscola','poker-italiano','texas-holdem'])assert.ok(games.includes(id),id);
   assert.deepEqual([...games].sort(),Object.keys(catalog).sort());
   assert.deepEqual([...games].sort(),Object.keys(guides).sort());
   for(const sections of Object.values(guides))assert.ok(sections.length>=3);

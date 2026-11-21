@@ -1,4 +1,4 @@
-import { create, join, submit, snapshot, chat, renameSeat, playBot, spectator, sessionLifetime } from './room.mjs';
+import { create, join, submit, snapshot, chat, renameSeat, playBot, spectator, sessionLifetime, advanceRoomClock } from './room.mjs';
 import { parseChat } from '../public/chat-format.mjs';
 import { version } from '../public/version.mjs';
 
@@ -30,6 +30,12 @@ export async function handle(request, operation, read, commit) {
   // All room operations after body parsing are synchronous, including persistence.
   const previous=read();
   if(previous?.updatedAt && Date.now()-previous.updatedAt>=sessionLifetime) return answer({error:'Stanza scaduta.'},404);
+  // A read after a restart can arrive before the scheduled wake-up. Commit the
+  // cover on its own so that a stale or invalid move cannot roll it back.
+  if(advanceRoomClock(previous)) {
+    try {commit(previous);}
+    catch {return answer({error:'Salvataggio temporaneamente non disponibile. Riprova.'},503);}
+  }
   let room=previous, changed=false;
   try {
     if(request.method==='POST' && !operation && !room) {

@@ -1,6 +1,8 @@
 # Tavolo
 
-Quindici giochi da fare con gli amici tramite link, oppure contro il computer. La sala carte comprende Scopa e Scopone scientifico, UNO, Briscola, Poker italiano e Poker Texas Hold’em. Gli altri tavoli sono Scacchi, Battaglia navale, Forza 4, Reversi, Tris, Dama italiana, Backgammon, Go, Nim e Punti e quadrati. Ogni stanza include la scheda **Regole**, la chat e il ripristino della partita.
+Sedici giochi da fare con gli amici tramite link, oppure contro il computer. La sala carte comprende Memory, Scopa e Scopone scientifico, UNO, Briscola, Poker italiano e Poker Texas Hold’em. Gli altri tavoli sono Scacchi, Battaglia navale, Forza 4, Reversi, Tris, Dama italiana, Backgammon, Go, Nim e Punti e quadrati. Ogni stanza include la scheda **Regole**, la chat e il ripristino della partita.
+
+In **Memory · Atlante degli uccelli** da due a quattro giocatori cercano dodici coppie illustrate. Le carte si girano con un tocco o con Invio e Spazio. Le frecce spostano il fuoco tra le carte e il pulsante **Aa** mostra i nomi degli uccelli. Le incisioni di Robert Havell su disegno di John James Audubon provengono dalla National Gallery of Art di Washington. [Opere e attribuzioni](THIRD_PARTY_NOTICES.md#memory)
 
 ## Gioca a Tavolo
 

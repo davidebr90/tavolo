@@ -1,4 +1,9 @@
 export const catalog = {
+  memory: {
+    name:'Memory',category:'Carte',color:'mint',players:['Posto 1','Posto 2'],seats:[2,3,4],
+    desc:'Ritrova le dodici coppie di uccelli dell’atlante illustrato.',
+    source:['National Gallery of Art · Le illustrazioni','https://www.nga.gov/artworks/free-images-and-open-access']
+  },
   chess: {
     name:'Scacchi', category:'Strategia', art:'♞', color:'lavender', players:['Bianco','Nero'],
     desc:'Proteggi il re, costruisci il tuo attacco.',

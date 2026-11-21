@@ -715,13 +715,30 @@ function pokerBot(s,side,level,quick) {
   return {type:'fold'};
 }
 
+function memoryBot(game,side,level) {
+  const {cards}=view(game,side);
+  const down=cards.flatMap((card,at)=>card.state==='down'?[at]:[]);
+  const up=cards.find(card=>card.state==='up');
+  const remembered=game.observations.slice(-[3,9,24][level]).filter(card=>down.includes(card.at));
+  if(up) {
+    const mate=remembered.find(card=>card.picture===up.picture);
+    if(mate)return {at:mate.at};
+  } else {
+    const pair=remembered.find(card=>remembered.some(other=>other.at!==card.at&&other.picture===card.picture));
+    if(pair)return {at:pair.at};
+  }
+  const unseen=down.filter(at=>!remembered.some(card=>card.at===at));
+  return {at:pick(unseen.length?unseen:down)};
+}
+
 // ---- Entry points --------------------------------------------------------------------------
 const strategies={chess:chessBot,dama:damaBot,reversi:reversiBot,tris:trisBot,four:fourBot,nim:nimBot,dots:dotsBot,go:goBot,
-  backgammon:bgBot,naval:navalBot,scopa:scopaBot,briscola:briscolaBot,uno:unoBot,'poker-italiano':pokerBot,'texas-holdem':pokerBot};
+  backgammon:bgBot,naval:navalBot,scopa:scopaBot,briscola:briscolaBot,uno:unoBot,'poker-italiano':pokerBot,'texas-holdem':pokerBot,memory:memoryBot};
 // An action that is certainly legal, chosen without thinking.
 export function anyAction(game,side) {
   const v=view(game,side);
   switch(game.id) {
+    case 'memory': return {at:pick(v.cards.flatMap((card,at)=>card.state==='down'?[at]:[]))};
     case 'chess': {const {from,to,promote}=pick(available(game));return promote?{from,to,promote}:{from,to};}
     case 'dama': return {path:pick(available(game)).path};
     case 'reversi': case 'tris': case 'four': return {at:pick(available(game)).at};

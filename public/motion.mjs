@@ -4,18 +4,23 @@
 const reduce=typeof matchMedia==='function'?matchMedia('(prefers-reduced-motion: reduce)'):{matches:true};
 const KEY='tavolo:effetti';
 function stored() {try {return localStorage.getItem(KEY);} catch {return null;}}
+let preference=stored();
 export const systemReduced=()=>reduce.matches;
-export function motionLevel() {return reduce.matches||stored()==='calm'?'calm':'full';}
+export function motionLevel() {return reduce.matches||preference==='calm'?'calm':'full';}
 export const lively=()=>motionLevel()==='full';
 export function applyMotionLevel() {
   if(typeof document!=='undefined')document.documentElement.dataset.motion=motionLevel();
-  if(!lively())cancelCardFlights();
+  if(!lively())clearMotion();
 }
 export function setMotionLevel(level) {
-  try {localStorage.setItem(KEY,level==='calm'?'calm':'full');} catch {}
+  preference=level==='calm'?'calm':'full';
+  try {localStorage.setItem(KEY,preference);} catch {}
   applyMotionLevel();
 }
 reduce.addEventListener?.('change',applyMotionLevel);
+globalThis.addEventListener?.('storage',event=>{
+  if(event.key===KEY||event.key===null){preference=stored();applyMotionLevel();}
+});
 
 const html=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rand=(a,b)=>a+Math.random()*(b-a);
@@ -37,7 +42,8 @@ export const palettes={
 let canvas=null, ctx=null, raf=0, clock=0;
 const particles=[];
 function fit() {
-  const ratio=Math.min(devicePixelRatio||1,2);
+  // Sparks and smoke do not need a high-DPI framebuffer the size of a 4K monitor.
+  const ratio=Math.min(devicePixelRatio||1,2,Math.sqrt(2073600/(innerWidth*innerHeight)));
   canvas.width=Math.round(innerWidth*ratio);
   canvas.height=Math.round(innerHeight*ratio);
   ctx=canvas.getContext('2d');
@@ -108,7 +114,7 @@ function paint(p,alpha,t) {
   }
 }
 function step(now) {
-  const dt=Math.min(34,now-clock)/16.67;
+  const elapsed=now-clock, dt=Math.min(34,elapsed)/16.67;
   clock=now;
   ctx.save();
   ctx.setTransform(1,0,0,1,0,0);
@@ -116,7 +122,7 @@ function step(now) {
   ctx.restore();
   for(let i=particles.length-1;i>=0;i--) {
     const p=particles[i];
-    p.age+=dt*16.67;
+    p.age+=elapsed;
     if(p.age>=p.life){particles.splice(i,1);continue;}
     const drag=Math.pow(p.drag,dt);
     p.vx*=drag;
@@ -133,7 +139,7 @@ function step(now) {
   raf=particles.length?requestAnimationFrame(step):0;
 }
 export function burst(x,y,{count=24,colors=palettes.oro,kind='spark',speed=[2,7],angle=[0,Math.PI*2],gravity=.12,life=[550,1100],size=[2,5],drag=.975,spread=0}={}) {
-  if(!lively()||!Number.isFinite(x)||!Number.isFinite(y)||!surface())return;
+  if(!lively()||document.hidden||!Number.isFinite(x)||!Number.isFinite(y)||!surface())return;
   for(let i=0;i<count;i++) {
     const a=rand(...angle), v=rand(...speed);
     particles.push({x:x+rand(-spread,spread),y:y+rand(-spread,spread),vx:Math.cos(a)*v,vy:Math.sin(a)*v,gravity,drag,kind,
@@ -141,6 +147,12 @@ export function burst(x,y,{count=24,colors=palettes.oro,kind='spark',speed=[2,7]
   }
   if(particles.length>1400)particles.splice(0,particles.length-1400);
   if(!raf){clock=performance.now();raf=requestAnimationFrame(step);}
+}
+function clearParticles() {
+  if(raf)cancelAnimationFrame(raf);
+  raf=0;
+  particles.length=0;
+  if(ctx)ctx.clearRect(0,0,innerWidth,innerHeight);
 }
 export function burstAt(el,options) {
   const r=el?.getBoundingClientRect?.()??el;
@@ -172,8 +184,10 @@ export function sparkle(target,colors=palettes.oro,count=18) {
 // ---- DOM helpers -------------------------------------------------------
 export function flash(el,className,ms=1000) {
   if(!el||!lively())return;
-  el.classList.remove(className);
-  void el.offsetWidth;
+  if(el.classList.contains(className)){
+    el.classList.remove(className);
+    void el.offsetWidth;
+  }
   el.classList.add(className);
   setTimeout(()=>el.classList.remove(className),ms);
 }
@@ -196,24 +210,6 @@ export function shake(el,strength=6) {
     {transform:`translate(${-s/2}px,${s/3}px)`},{transform:`translate(${s/3}px,0)`},{transform:'none'}],{duration:420,easing:'ease-out'});
 }
 
-// The app re-renders by replacing the DOM. An element hidden while its ghost travels is
-// tracked by selector, so a re-render in the middle of the trip does not show it twice.
-const concealed=new Map();
-let concealId=0;
-function concealWhile(el,selector,done) {
-  if(el)el.style.visibility='hidden';
-  const id=++concealId;
-  if(selector)concealed.set(id,selector);
-  return Promise.resolve(done).catch(()=>{}).finally(()=>{
-    concealed.delete(id);
-    if(el?.isConnected)el.style.visibility='';
-    if(selector&&![...concealed.values()].includes(selector))for(const other of document.querySelectorAll(selector))other.style.visibility='';
-  });
-}
-export function reconceal(root=document) {
-  for(const selector of new Set(concealed.values()))for(const el of root.querySelectorAll(selector))el.style.visibility='hidden';
-}
-
 function ghostBox(rect,content,host='') {
   const box=document.createElement('div');
   box.className='fx-ghost '+host;
@@ -228,7 +224,7 @@ function ghostBox(rect,content,host='') {
 const place=(r,scale=1,lift=0)=>`translate(${r.left}px,${r.top-lift}px) scale(${scale})`;
 
 // Moves a clone of `el` through the given rectangles, then reveals the original.
-export function travel(el,rects,{duration=440,arc=0,lift=1.14,host='',conceal=''}={}) {
+export function travel(el,rects,{duration=440,arc=0,lift=1.14,host='',scope,arrival=()=>[el]}={}) {
   if(!lively()||!el||rects.length<2||rects.some(r=>!r?.width))return Promise.resolve();
   const end=rects.at(-1);
   const box=ghostBox(end,el.cloneNode(true),host);
@@ -241,9 +237,8 @@ export function travel(el,rects,{duration=440,arc=0,lift=1.14,host='',conceal=''
   });
   frames.push({transform:place(end,.96),offset:.93},{transform:place(end),offset:1});
   frames.sort((a,b)=>a.offset-b.offset);
-  const done=box.animate(frames,{duration:duration*legs+120,easing:'cubic-bezier(.3,.6,.25,1)',fill:'both'}).finished
-    .catch(()=>{}).finally(()=>box.remove());
-  return concealWhile(el,conceal,done);
+  const animation=box.animate(frames,{duration:duration*legs+120,easing:'cubic-bezier(.3,.6,.25,1)',fill:'both'});
+  return track({scope,arrival,animations:[animation],elements:[box]});
 }
 
 // A piece leaving the board: lifts, spins and dissolves where it stood.
@@ -269,6 +264,11 @@ export function syncCardFlights(scope) {
 export function cancelCardFlights() {
   for(const card of cardFlights)card.finish();
 }
+function clearMotion() {
+  cancelCardFlights();
+  clearParticles();
+  clearAnnouncements();
+}
 if(typeof window!=='undefined') {
   // A phone resizes the viewport whenever its address bar slides away: only a new width moves the table.
   let width=window.innerWidth;
@@ -277,13 +277,20 @@ if(typeof window!=='undefined') {
     width=window.innerWidth;
     cancelCardFlights();
   },{passive:true});
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelCardFlights();});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)clearMotion();});
 }
 // Everything in flight is measured in viewport coordinates but anchored to the document,
 // so it stays on the table while the page scrolls.
+let batchScroll=null;
+export function playTableEffects(effects) {
+  if(!effects.length)return;
+  batchScroll=[globalThis.scrollX||0,globalThis.scrollY||0];
+  try {for(const start of effects)start();}
+  finally {batchScroll=null;}
+}
 function pin(el) {
-  el.style.left=(globalThis.scrollX||0)+'px';
-  el.style.top=(globalThis.scrollY||0)+'px';
+  el.style.left=(batchScroll?.[0]??(globalThis.scrollX||0))+'px';
+  el.style.top=(batchScroll?.[1]??(globalThis.scrollY||0))+'px';
   return el;
 }
 
@@ -296,12 +303,6 @@ export function flight({face,back='',from,to,delay=0,duration=640,flip=false,arr
   el.style.height=to.height+'px';
   el.innerHTML='<div class="fx-card-inner'+(flip?' is-flipping':'')+'">'+(flip?'<div class="fx-face fx-back">'+back+'</div><div class="fx-face fx-front">'+face+'</div>':'<div class="fx-face">'+face+'</div>')+'</div>';
   document.body.append(pin(el));
-  let masked=[];
-  const mask=()=>{
-    masked=arrival?.().filter(Boolean)??[];
-    masked.forEach(node=>node.classList.add('awaiting-card'));
-  };
-  mask();
   const s0=from.width/to.width;
   const x0=from.left+from.width/2-to.width/2, y0=from.top+from.height/2-to.height/2;
   const x1=to.left, y1=to.top, lift=rise??Math.max(36,Math.hypot(x1-x0,y1-y0)*.22);
@@ -313,14 +314,7 @@ export function flight({face,back='',from,to,delay=0,duration=640,flip=false,arr
     {transform:`translate(${x1}px,${y1}px) rotate(${rest}deg) scale(${end})`,opacity:1,offset:.9},
     {transform:`translate(${x1}px,${y1}px) rotate(${rest}deg) scale(${end})`,opacity:shrink?0:1}
   ],{duration,delay,easing:'cubic-bezier(.35,.6,.25,1)',fill:'both'});
-  const card={scope,mask,finish(){
-    if(!cardFlights.delete(card))return;
-    animation.cancel();
-    el.remove();
-    masked.forEach(node=>node.classList.remove('awaiting-card'));
-  }};
-  cardFlights.add(card);
-  animation.finished.then(card.finish,card.finish);
+  track({scope,arrival,animations:[animation],elements:[el]});
   if(flip) el.firstElementChild.animate([{transform:'rotateY(0deg)'},{transform:'rotateY(180deg)'}],
     {duration:duration*.22,delay:delay+duration*.76,easing:'ease-out',fill:'both'});
 }
@@ -370,22 +364,34 @@ function cardGhost(to,face,back,flip) {
 }
 // Hands, thrown cards and chips share the card flights' register: a redraw of the same table
 // state hides their destinations again, any other state ends them at once.
+const reservations=new WeakMap();
+function release(node) {
+  const count=reservations.get(node);
+  if(count>1){reservations.set(node,count-1);return;}
+  reservations.delete(node);
+  node.classList.remove('awaiting-card');
+}
 function track({scope,arrival,animations,elements}) {
-  let masked=[];
+  let masked=new Set();
   const mask=()=>{
-    masked=arrival?.().filter(Boolean)??[];
-    masked.forEach(node=>node.classList.add('awaiting-card'));
+    const next=new Set(arrival?.().filter(Boolean));
+    for(const node of masked)if(!next.has(node))release(node);
+    for(const node of next)if(!masked.has(node)) {
+      reservations.set(node,(reservations.get(node)??0)+1);
+      node.classList.add('awaiting-card');
+    }
+    masked=next;
   };
   mask();
   const entry={scope,mask,finish() {
     if(!cardFlights.delete(entry))return;
     for(const animation of animations)animation.cancel();
     for(const el of elements)el.remove();
-    masked.forEach(node=>node.classList.remove('awaiting-card'));
+    masked.forEach(release);
   }};
   cardFlights.add(entry);
-  Promise.all(animations.map(animation=>animation.finished)).then(entry.finish,entry.finish);
-  return entry;
+  const done=animations.length===1?animations[0].finished:Promise.all(animations.map(animation=>animation.finished));
+  return done.then(entry.finish,entry.finish);
 }
 const usable=()=>lively()&&typeof Element.prototype.animate==='function';
 const aim=(from,to)=>{
@@ -535,8 +541,7 @@ export function knock({origin,toward,scope,color='#d9b366',delay=0}) {
 }
 
 // Lets an element that changed place glide from its previous rectangle to the new one.
-export function glide(el,from,{delay=0,duration=420}={}) {
-  const to=el?.getBoundingClientRect?.();
+export function glide(el,from,{delay=0,duration=420,to=el?.getBoundingClientRect?.()}={}) {
   if(!usable()||!from?.width||!to?.width)return;
   const dx=from.left+from.width/2-(to.left+to.width/2), dy=from.top+from.height/2-(to.top+to.height/2);
   if(Math.abs(dx)<1&&Math.abs(dy)<1)return;
@@ -545,22 +550,35 @@ export function glide(el,from,{delay=0,duration=420}={}) {
 
 // ---- Announcements -----------------------------------------------------
 const queue=[];
-let showing=false;
+let announcement=null, announceTimer;
+let announcementMatch='';
+export function syncAnnouncements(code,room,tab) {
+  const match=room&&tab==='play'&&!room.closed?[code,room.game.id,room.games??1].join('/'):'';
+  if(match===announcementMatch)return;
+  announcementMatch=match;
+  clearAnnouncements();
+}
+function clearAnnouncements() {
+  queue.length=0;
+  clearTimeout(announceTimer);
+  announcement?.remove();
+  announcement=null;
+}
 export function announce(text,{tone='gold',sub='',hold=1500}={}) {
-  if(!lively())return;
+  if(!lively()||document.hidden)return;
   queue.push({text,tone,sub,hold});
-  if(!showing)nextAnnouncement();
+  if(!announcement)nextAnnouncement();
 }
 function nextAnnouncement() {
   const item=queue.shift();
-  if(!item){showing=false;return;}
-  showing=true;
+  if(!item)return;
   const el=document.createElement('div');
+  announcement=el;
   el.className='fx-announce tone-'+item.tone;
   el.setAttribute('aria-hidden','true');
   el.style.setProperty('--hold',item.hold+'ms');
   el.innerHTML='<span class="fx-rays"></span><strong>'+Array.from(item.text,(ch,i)=>'<i style="--i:'+i+'">'+(ch===' '?'&nbsp;':html(ch))+'</i>').join('')+'</strong>'+
     (item.sub?'<small>'+html(item.sub)+'</small>':'');
   document.body.append(el);
-  setTimeout(()=>{el.remove();nextAnnouncement();},item.hold+650);
+  announceTimer=setTimeout(()=>{el.remove();announcement=null;nextAnnouncement();},item.hold+650);
 }

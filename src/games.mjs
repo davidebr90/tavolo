@@ -1,11 +1,12 @@
 import { chessStart, chessMoves, chessPlay, checked, canClaimDraw } from './chess.mjs';
 import { startCards, playCards, viewCards } from './cards.mjs';
 import { startBriscola, playBriscola, viewBriscola } from './briscola.mjs';
+import { startMemory, playMemory, viewMemory } from './memory.mjs';
 import { pokerIds, startPoker, playPoker, viewPoker } from './poker.mjs';
 import { strategyIds, strategyStart, strategyPlay, strategyView } from './strategy.mjs';
 
 const cards=['scopa','uno'];
-export const games=['chess','naval','four','reversi','tris','dama',...cards,'briscola',...pokerIds,...strategyIds];
+export const games=['chess','naval','four','reversi','tris','dama',...cards,'briscola',...pokerIds,...strategyIds,'memory'];
 const grid=(n)=>Array(n).fill(0);
 const adjacent=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
 const diagonals=adjacent.filter(([r,c])=>r&&c);
@@ -37,6 +38,7 @@ export function fleet(size=10,fleetLengths=lengths) {
 export function start(id,options={}) {
   if(!games.includes(id)) throw new Error('Gioco non disponibile.');
   if(id==='chess') return chessStart();
+  if(id==='memory') return startMemory(options);
   if(cards.includes(id)) return startCards(id,options);
   if(id==='briscola') return startBriscola(options);
   if(pokerIds.includes(id)) return startPoker(id,options);
@@ -137,6 +139,7 @@ export function play(s,action,side=s.turn) {
   if(s.id==='naval') return navalPlay(s,action,side);
   if(side!==s.turn) throw new Error('Aspetta il tuo turno.');
   if(s.id==='chess') return chessPlay(s,action);
+  if(s.id==='memory') return playMemory(s,action);
   if(cards.includes(s.id)) return playCards(s,action);
   if(s.id==='briscola') return playBriscola(s,action,side);
   if(pokerIds.includes(s.id)) return playPoker(s,action);
@@ -190,6 +193,7 @@ export function play(s,action,side=s.turn) {
   return next;
 }
 export function view(s,side) {
+  if(s.id==='memory') return viewMemory(s);
   if(cards.includes(s.id)) return viewCards(s,side);
   if(s.id==='briscola') return viewBriscola(s,side);
   if(pokerIds.includes(s.id)) return viewPoker(s,side);
