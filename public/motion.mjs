@@ -10,7 +10,7 @@ export function motionLevel() {return reduce.matches||preference==='calm'?'calm'
 export const lively=()=>motionLevel()==='full';
 export function applyMotionLevel() {
   if(typeof document!=='undefined')document.documentElement.dataset.motion=motionLevel();
-  if(!lively()){cancelCardFlights();clearParticles();}
+  if(!lively())clearMotion();
 }
 export function setMotionLevel(level) {
   preference=level==='calm'?'calm':'full';
@@ -264,6 +264,11 @@ export function syncCardFlights(scope) {
 export function cancelCardFlights() {
   for(const card of cardFlights)card.finish();
 }
+function clearMotion() {
+  cancelCardFlights();
+  clearParticles();
+  clearAnnouncements();
+}
 if(typeof window!=='undefined') {
   // A phone resizes the viewport whenever its address bar slides away: only a new width moves the table.
   let width=window.innerWidth;
@@ -272,7 +277,7 @@ if(typeof window!=='undefined') {
     width=window.innerWidth;
     cancelCardFlights();
   },{passive:true});
-  document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelCardFlights();clearParticles();}});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)clearMotion();});
 }
 // Everything in flight is measured in viewport coordinates but anchored to the document,
 // so it stays on the table while the page scrolls.
@@ -545,22 +550,35 @@ export function glide(el,from,{delay=0,duration=420,to=el?.getBoundingClientRect
 
 // ---- Announcements -----------------------------------------------------
 const queue=[];
-let showing=false;
+let announcement=null, announceTimer;
+let announcementMatch='';
+export function syncAnnouncements(code,room,tab) {
+  const match=room&&tab==='play'&&!room.closed?[code,room.game.id,room.games??1].join('/'):'';
+  if(match===announcementMatch)return;
+  announcementMatch=match;
+  clearAnnouncements();
+}
+function clearAnnouncements() {
+  queue.length=0;
+  clearTimeout(announceTimer);
+  announcement?.remove();
+  announcement=null;
+}
 export function announce(text,{tone='gold',sub='',hold=1500}={}) {
-  if(!lively())return;
+  if(!lively()||document.hidden)return;
   queue.push({text,tone,sub,hold});
-  if(!showing)nextAnnouncement();
+  if(!announcement)nextAnnouncement();
 }
 function nextAnnouncement() {
   const item=queue.shift();
-  if(!item){showing=false;return;}
-  showing=true;
+  if(!item)return;
   const el=document.createElement('div');
+  announcement=el;
   el.className='fx-announce tone-'+item.tone;
   el.setAttribute('aria-hidden','true');
   el.style.setProperty('--hold',item.hold+'ms');
   el.innerHTML='<span class="fx-rays"></span><strong>'+Array.from(item.text,(ch,i)=>'<i style="--i:'+i+'">'+(ch===' '?'&nbsp;':html(ch))+'</i>').join('')+'</strong>'+
     (item.sub?'<small>'+html(item.sub)+'</small>':'');
   document.body.append(el);
-  setTimeout(()=>{el.remove();nextAnnouncement();},item.hold+650);
+  announceTimer=setTimeout(()=>{el.remove();announcement=null;nextAnnouncement();},item.hold+650);
 }

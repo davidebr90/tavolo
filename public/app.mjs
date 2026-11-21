@@ -1609,6 +1609,7 @@ function render() {
   memoryVersion=state?.version;
   app.classList.toggle('awaiting-players',!!state&&state.players.length<(state.maxPlayers??2));
   fx.syncCardFlights(cardFlightScope());
+  fx.syncAnnouncements(code,state,tab);
   updateTitle();
   
   if(!state&&!code)filterCatalog();
