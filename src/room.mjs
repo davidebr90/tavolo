@@ -95,6 +95,12 @@ function seat(room,token) {
   if(side<0) throw new Error('Accesso alla stanza non valido.');
   return side;
 }
+// Authorize the viewer before answering even a bodyless poll. A spectator and a
+// player see different hands and legal moves at the same position.
+export function roomViewTag(room,token) {
+  const viewer=token===spectator?'watch':seat(room,token);
+  return [room.createdAt??0,viewer,room.version,room.chatVersion??0,room.chessStyle?.revision??0].join('.');
+}
 const initialChessStyle=Object.freeze({id:defaultChessStyle,revision:0,author:null});
 export function changeChessStyle(room,token,data) {
   const player=room.players[seat(room,token)];

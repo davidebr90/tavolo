@@ -1,4 +1,4 @@
-import { create, join, submit, snapshot, chat, changeChessStyle, renameSeat, playBot, spectator, sessionLifetime, advanceRoomClock } from './room.mjs';
+import { create, join, submit, snapshot, chat, changeChessStyle, renameSeat, playBot, spectator, sessionLifetime, advanceRoomClock, roomViewTag } from './room.mjs';
 import { parseChat } from '../public/chat-format.mjs';
 import { version } from '../public/version.mjs';
 
@@ -56,7 +56,15 @@ export async function handle(request, operation, read, commit) {
     else if(!(!operation && ['GET','POST'].includes(request.method))) return answer({error:'Operazione non disponibile.'},405);
     // `?guarda` reads the room as a spectator: no seat is needed and nothing can be changed.
     const watching=request.method==='GET' && !operation && new URL(request.url).searchParams.has(spectator);
-    const state=snapshot(room,watching?spectator:token);
+    const viewer=watching?spectator:token;
+    if(request.method==='GET') {
+      const tag='"'+version+'.'+roomViewTag(room,viewer)+'"';
+      const headers={ETag:'W/'+tag,'Cache-Control':'private, no-store',Vary:'Authorization'};
+      const candidates=request.headers.get('If-None-Match')?.split(',')??[];
+      if(candidates.some(value=>value.trim().replace(/^W\//,'')===tag||value.trim()==='*'))return new Response(null,{status:304,headers});
+      return Response.json(snapshot(room,viewer),{headers});
+    }
+    const state=snapshot(room,viewer);
     if(changed) {
       room.updatedAt=Date.now();
       try {commit(room);}

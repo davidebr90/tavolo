@@ -39,13 +39,14 @@ export const palettes={
 };
 
 // ---- Particle layer ----------------------------------------------------
-let canvas=null, ctx=null, raf=0, clock=0;
+let canvas=null, ctx=null, raf=0, clock=0, painted=null;
 const particles=[];
 function fit() {
   // Sparks and smoke do not need a high-DPI framebuffer the size of a 4K monitor.
   const ratio=Math.min(devicePixelRatio||1,2,Math.sqrt(2073600/(innerWidth*innerHeight)));
   canvas.width=Math.round(innerWidth*ratio);
   canvas.height=Math.round(innerHeight*ratio);
+  painted=null;
   ctx=canvas.getContext('2d');
   ctx?.setTransform(ratio,0,0,ratio,0,0);
 }
@@ -116,10 +117,8 @@ function paint(p,alpha,t) {
 function step(now) {
   const elapsed=now-clock, dt=Math.min(34,elapsed)/16.67;
   clock=now;
-  ctx.save();
-  ctx.setTransform(1,0,0,1,0,0);
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.restore();
+  clearPainted();
+  let left=Infinity, top=Infinity, right=-Infinity, bottom=-Infinity;
   for(let i=particles.length-1;i>=0;i--) {
     const p=particles[i];
     p.age+=elapsed;
@@ -133,10 +132,23 @@ function step(now) {
     p.phase+=.16*dt;
     const t=p.age/p.life;
     paint(p,t<.7?1:1-(t-.7)/.3,t);
+    // Include growing smoke, rotating confetti, antialiasing and the full tail
+    // of each spark. Coordinates are in CSS pixels, as is the drawing transform.
+    const radius=p.size*(p.kind==='smoke'?1+t*2.6:1.25)+3;
+    const tailX=p.kind==='spark'?p.x-p.vx*2.6:p.x, tailY=p.kind==='spark'?p.y-p.vy*2.6:p.y;
+    left=Math.min(left,p.x-radius,tailX-radius);
+    top=Math.min(top,p.y-radius,tailY-radius);
+    right=Math.max(right,p.x+radius,tailX+radius);
+    bottom=Math.max(bottom,p.y+radius,tailY+radius);
   }
   ctx.globalAlpha=1;
   ctx.globalCompositeOperation='source-over';
+  if(particles.length)painted=[left,top,right-left,bottom-top];
   raf=particles.length?requestAnimationFrame(step):0;
+}
+function clearPainted() {
+  if(painted)ctx.clearRect(...painted);
+  painted=null;
 }
 export function burst(x,y,{count=24,colors=palettes.oro,kind='spark',speed=[2,7],angle=[0,Math.PI*2],gravity=.12,life=[550,1100],size=[2,5],drag=.975,spread=0}={}) {
   if(!lively()||document.hidden||!Number.isFinite(x)||!Number.isFinite(y)||!surface())return;
@@ -152,7 +164,7 @@ function clearParticles() {
   if(raf)cancelAnimationFrame(raf);
   raf=0;
   particles.length=0;
-  if(ctx)ctx.clearRect(0,0,innerWidth,innerHeight);
+  clearPainted();
 }
 export function burstAt(el,options) {
   const r=el?.getBoundingClientRect?.()??el;
@@ -160,14 +172,27 @@ export function burstAt(el,options) {
 }
 
 // ---- Preset bursts -----------------------------------------------------
+const delayedEffects=new Set();
+export function afterMotion(delay,run) {
+  if(!lively()||document.hidden)return;
+  const timer=setTimeout(()=>{
+    delayedEffects.delete(timer);
+    if(lively()&&!document.hidden)run();
+  },delay);
+  delayedEffects.add(timer);
+}
+function clearDelayedEffects() {
+  delayedEffects.forEach(clearTimeout);
+  delayedEffects.clear();
+}
 export function confetti() {
   if(!lively())return;
   const w=innerWidth, h=innerHeight;
   burst(-8,h*.78,{kind:'confetti',count:110,colors:palettes.festa,speed:[11,20],angle:[-1.32,-.62],gravity:.26,life:[2300,3600],size:[4,8],drag:.988});
   burst(w+8,h*.78,{kind:'confetti',count:110,colors:palettes.festa,speed:[11,20],angle:[-Math.PI+.62,-Math.PI+1.32],gravity:.26,life:[2300,3600],size:[4,8],drag:.988});
-  setTimeout(()=>burst(w/2,h*.36,{kind:'star',count:46,colors:palettes.oro,speed:[2,10],gravity:.05,life:[900,1700],size:[3,8]}),260);
-  setTimeout(()=>burst(w*.3,h*.25,{kind:'spark',count:36,colors:palettes.festa,speed:[3,9],gravity:.08,life:[700,1200]}),520);
-  setTimeout(()=>burst(w*.7,h*.28,{kind:'spark',count:36,colors:palettes.festa,speed:[3,9],gravity:.08,life:[700,1200]}),760);
+  afterMotion(260,()=>burst(w/2,h*.36,{kind:'star',count:46,colors:palettes.oro,speed:[2,10],gravity:.05,life:[900,1700],size:[3,8]}));
+  afterMotion(520,()=>burst(w*.3,h*.25,{kind:'spark',count:36,colors:palettes.festa,speed:[3,9],gravity:.08,life:[700,1200]}));
+  afterMotion(760,()=>burst(w*.7,h*.28,{kind:'spark',count:36,colors:palettes.festa,speed:[3,9],gravity:.08,life:[700,1200]}));
 }
 export function explosion(target) {
   burstAt(target,{kind:'spark',count:34,colors:palettes.fuoco,speed:[3,10],gravity:.1,life:[450,900],size:[2,4]});
@@ -266,6 +291,7 @@ export function cancelCardFlights() {
 }
 function clearMotion() {
   cancelCardFlights();
+  clearDelayedEffects();
   clearParticles();
   clearAnnouncements();
 }
@@ -281,28 +307,68 @@ if(typeof window!=='undefined') {
 }
 // Everything in flight is measured in viewport coordinates but anchored to the document,
 // so it stays on the table while the page scrolls.
-let batchScroll=null;
+let batchScroll=null, batchTime=0;
 export function playTableEffects(effects) {
   if(!effects.length)return;
   batchScroll=[globalThis.scrollX||0,globalThis.scrollY||0];
+  batchTime=performance.now();
   try {for(const start of effects)start();}
   finally {batchScroll=null;}
 }
-function pin(el) {
-  el.style.left=(batchScroll?.[0]??(globalThis.scrollX||0))+'px';
-  el.style.top=(batchScroll?.[1]??(globalThis.scrollY||0))+'px';
+function pin(el,scroll=batchScroll) {
+  el.style.left=(scroll?.[0]??(globalThis.scrollX||0))+'px';
+  el.style.top=(scroll?.[1]??(globalThis.scrollY||0))+'px';
   return el;
 }
 
-export function flight({face,back='',from,to,delay=0,duration=640,flip=false,arrival,scope,hold=false,tilt=0,rest=0,shrink=false,rise}) {
-  if(!lively()||!from?.width||!to?.width||typeof Element.prototype.animate!=='function')return;
+// Only cards actually in transit need a DOM overlay and compositor layer. All
+// destinations are reserved now; one timer serves the deal's pending departures.
+const departures=new Map();
+let departureTimer, nextDeparture=Infinity;
+function wakeForDeparture(at) {
+  if(at>=nextDeparture)return;
+  nextDeparture=at;
+  clearTimeout(departureTimer);
+  departureTimer=setTimeout(launchCards,Math.max(0,at-performance.now()));
+}
+function launchCards() {
+  nextDeparture=Infinity;
+  const now=performance.now();
+  let next=Infinity;
+  for(const [launch,at] of departures) {
+    if(at<=now){departures.delete(launch);launch(now-at);}
+    else next=Math.min(next,at);
+  }
+  wakeForDeparture(next);
+}
+export function flight(options) {
+  const {from,to,delay=0,duration=640,scope,arrival,hold}=options;
+  if(!usable()||document.hidden||!from?.width||!to?.width)return;
+  if(delay<=0||hold){startFlight(options,batchScroll,delay);return;}
+  const at=(batchScroll?batchTime:performance.now())+delay;
+  const scroll=batchScroll??[globalThis.scrollX||0,globalThis.scrollY||0];
+  const launch=late=>{
+    try {
+      // A stalled main thread can miss a flight completely. Reveal the real
+      // card in that case, or start its animation at the current deal time.
+      if(late<duration&&!document.hidden&&lively())startFlight(options,scroll,-late);
+    } finally {reservation.finish();}
+  };
+  const reservation=reserve(scope,arrival,()=>{
+    departures.delete(launch);
+    if(!departures.size){clearTimeout(departureTimer);nextDeparture=Infinity;}
+  });
+  departures.set(launch,at);
+  wakeForDeparture(at);
+}
+function startFlight({face,back='',from,to,duration=640,flip=false,arrival,scope,hold=false,tilt=0,rest=0,shrink=false,rise},scroll,delay) {
   const el=document.createElement('div');
   el.className='fx-card';
   el.setAttribute('aria-hidden','true');
   el.style.width=to.width+'px';
   el.style.height=to.height+'px';
   el.innerHTML='<div class="fx-card-inner'+(flip?' is-flipping':'')+'">'+(flip?'<div class="fx-face fx-back">'+back+'</div><div class="fx-face fx-front">'+face+'</div>':'<div class="fx-face">'+face+'</div>')+'</div>';
-  document.body.append(pin(el));
+  document.body.append(pin(el,scroll));
   const s0=from.width/to.width;
   const x0=from.left+from.width/2-to.width/2, y0=from.top+from.height/2-to.height/2;
   const x1=to.left, y1=to.top, lift=rise??Math.max(36,Math.hypot(x1-x0,y1-y0)*.22);
@@ -314,9 +380,10 @@ export function flight({face,back='',from,to,delay=0,duration=640,flip=false,arr
     {transform:`translate(${x1}px,${y1}px) rotate(${rest}deg) scale(${end})`,opacity:1,offset:.9},
     {transform:`translate(${x1}px,${y1}px) rotate(${rest}deg) scale(${end})`,opacity:shrink?0:1}
   ],{duration,delay,easing:'cubic-bezier(.35,.6,.25,1)',fill:'both'});
-  track({scope,arrival,animations:[animation],elements:[el]});
-  if(flip) el.firstElementChild.animate([{transform:'rotateY(0deg)'},{transform:'rotateY(180deg)'}],
-    {duration:duration*.22,delay:delay+duration*.76,easing:'ease-out',fill:'both'});
+  const animations=[animation];
+  if(flip)animations.push(el.firstElementChild.animate([{transform:'rotateY(0deg)'},{transform:'rotateY(180deg)'}],
+    {duration:duration*.22,delay:delay+duration*.76,easing:'ease-out',fill:'both'}));
+  track({scope,arrival,animations,elements:[el]});
 }
 
 // ---- Hands at the table --------------------------------------------------
@@ -371,7 +438,7 @@ function release(node) {
   reservations.delete(node);
   node.classList.remove('awaiting-card');
 }
-function track({scope,arrival,animations,elements}) {
+function reserve(scope,arrival,cleanup) {
   let masked=new Set();
   const mask=()=>{
     const next=new Set(arrival?.().filter(Boolean));
@@ -385,11 +452,17 @@ function track({scope,arrival,animations,elements}) {
   mask();
   const entry={scope,mask,finish() {
     if(!cardFlights.delete(entry))return;
-    for(const animation of animations)animation.cancel();
-    for(const el of elements)el.remove();
+    cleanup();
     masked.forEach(release);
   }};
   cardFlights.add(entry);
+  return entry;
+}
+function track({scope,arrival,animations,elements}) {
+  const entry=reserve(scope,arrival,()=>{
+    for(const animation of animations)animation.cancel();
+    for(const el of elements)el.remove();
+  });
   const done=animations.length===1?animations[0].finished:Promise.all(animations.map(animation=>animation.finished));
   return done.then(entry.finish,entry.finish);
 }
@@ -537,7 +610,7 @@ export function knock({origin,toward,scope,color='#d9b366',delay=0}) {
     {transform:gripAt(width,start.x,start.y,angle),opacity:0}
   ],{duration:640,delay,fill:'both',easing:'ease-in-out'});
   track({scope,animations:[animation],elements:[hand]});
-  setTimeout(()=>ring({left:spot.x-13,top:spot.y-13,width:26,height:26},{scale:1.8,duration:420}),delay+270);
+  afterMotion(delay+270,()=>ring({left:spot.x-13,top:spot.y-13,width:26,height:26},{scale:1.8,duration:420}));
 }
 
 // Lets an element that changed place glide from its previous rectangle to the new one.
@@ -557,6 +630,7 @@ export function syncAnnouncements(code,room,tab) {
   if(match===announcementMatch)return;
   announcementMatch=match;
   clearAnnouncements();
+  clearDelayedEffects();
 }
 function clearAnnouncements() {
   queue.length=0;
@@ -577,7 +651,10 @@ function nextAnnouncement() {
   el.className='fx-announce tone-'+item.tone;
   el.setAttribute('aria-hidden','true');
   el.style.setProperty('--hold',item.hold+'ms');
-  el.innerHTML='<span class="fx-rays"></span><strong>'+Array.from(item.text,(ch,i)=>'<i style="--i:'+i+'">'+(ch===' '?'&nbsp;':html(ch))+'</i>').join('')+'</strong>'+
+  let letter=0;
+  const words=item.text.split(/\s+/u).map(word=>'<span class="fx-word">'+
+    Array.from(word,ch=>'<i style="--i:'+letter+++'">'+html(ch)+'</i>').join('')+'</span>');
+  el.innerHTML='<span class="fx-rays"></span><strong>'+words.join(' ')+'</strong>'+
     (item.sub?'<small>'+html(item.sub)+'</small>':'');
   document.body.append(el);
   announceTimer=setTimeout(()=>{el.remove();announcement=null;nextAnnouncement();},item.hold+650);
