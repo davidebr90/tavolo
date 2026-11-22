@@ -861,7 +861,7 @@ button.stock:hover{transform:translateY(-4px)}
 @container match (max-width:15rem){
   .card-table .seat.on-axis .seat-info>strong{white-space:nowrap}
   .card-table .table-stage{padding-bottom:3.5rem}
-  .card-table .stock>span{max-width:100%;min-width:0;overflow-wrap:anywhere}
+  .card-table .stock>span{max-width:100%;min-width:0;overflow-wrap:anywhere;line-height:1.4}
 }
 
 /* 11 ─ Panels: chat and moves ───────────────────────────────────────── */
