@@ -6,6 +6,7 @@ import { memoryFigures, warmMemoryFigures } from './memory-figures.mjs';
 import { catalog } from './catalog.mjs';
 import { savedSeats, roomStatus, roomTransport, watchRoom, chatEntries, unreadChat, lastChessMove, isTeamRoom, tiedLeaders, comparingMemory } from './rooms.mjs';
 import { renderBriscola } from './briscola.mjs';
+import { seatPositions } from './table-layout.mjs';
 import { pokerTable, isPoker, pokerBack, cardFace as frenchCard, chipColors } from './poker-table.mjs';
 import { icon } from './icons.mjs';
 import { parseChat, chatColors, renderChatMessage } from './chat-format.mjs';
@@ -105,16 +106,25 @@ function toast(message) {
   toastTimer=setTimeout(()=>{el.hidden=true;},4200);
 }
 document.querySelector('#toast').addEventListener('click',e=>{e.currentTarget.hidden=true;clearTimeout(toastTimer);});
-async function api(path='',body,room=code,seat=token) {
+async function api(path='',body,room=code,seat=token,pollCache) {
+  const headers={Authorization:'Bearer '+seat};
+  if(body!==undefined)headers['Content-Type']='application/json';
+  if(pollCache?.tag)headers['If-None-Match']=pollCache.tag;
   const response=await fetch('/api/rooms/'+room+path+(watching&&room===code&&body===undefined&&!path?'?guarda=1':''),{
     method:body===undefined?'GET':'POST',
-    headers:{Authorization:'Bearer '+seat,...(body===undefined?{}:{'Content-Type':'application/json'})},
+    headers,
     body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(9000)
   });
+  if(response.status===304&&pollCache?.state)return pollCache.state;
   const data=await response.json().catch(()=>null);
   if(!response.ok) throw Object.assign(new Error(data?.error||'Richiesta non riuscita.'),{status:response.status});
   if(!data)throw Error('Risposta del server incompleta.');
+  if(pollCache){pollCache.tag=response.headers.get('ETag');pollCache.state=data;}
   return data;
+}
+function roomReader(room,seat) {
+  const cache={};
+  return ()=>api('',undefined,room,seat,cache);
 }
 function closeMessage(current,command) {
   if(typeof current.closed!=='boolean') throw Error('Il server usa una versione precedente. Riavvia node dev.mjs per abilitare la chiusura.');
@@ -248,7 +258,7 @@ async function live() {
     accept(next,{reconnect});
     if(reconnect)scheduleBot();
     if(state?.closed)stopLive?.();
-  },()=>api(),{interval:1200,onError:error=>{
+  },roomReader(code,token),{interval:1200,onError:error=>{
     if(error.status===404) {
       stopLive?.();
       state=null;
@@ -521,7 +531,7 @@ function paintRooms() {
     const active=s&&!s.closed&&s.game.result===null;
     const people=s?s.players.map((name,i)=>{
       const turn=s.closeRequest==null&&seatHasTurn(s,i);
-      return '<li class="room-person">'+icon('profile')+displayNickname(name,s.playerMarkup?.[i])+(i===s.side?' <em>Tu</em>':'')+(turn?' <em>Di turno</em>':'')+'</li>';
+      return '<li class="room-person">'+icon('profile')+'<span class="person-name">'+displayNickname(name,s.playerMarkup?.[i])+'</span>'+(i===s.side?' <em>Tu</em>':'')+(turn?' <em>Di turno</em>':'')+'</li>';
     }).join(''):'';
     const seats=s?'<div class="room-seats"><span>Giocatori <b>'+s.players.length+' / '+capacity+'</b></span>'+
       (active&&free?'<small>'+free+(free===1?' posto libero':' posti liberi')+'</small>':'')+'</div><ul class="room-people">'+people+'</ul>':'';
@@ -583,10 +593,18 @@ async function closeFromDashboard(room) {
     paintRooms();
   }
 }
+let roomPaintFrame=0;
+function scheduleRoomPaint(){
+  if(!roomPaintFrame)roomPaintFrame=requestAnimationFrame(()=>{roomPaintFrame=0;paintRooms();});
+}
 async function monitorRooms() {
   const entries=savedSeats().filter(entry=>entry.code!==code&&!monitors.has(entry.code));
   await Promise.all(entries.map(async entry=>{
+    let stopped=false, unsubscribe, botTimer;
+    const stop=()=>{stopped=true;unsubscribe?.();clearTimeout(botTimer);};
+    monitors.set(entry.code,stop);
     const receive=next=>{
+      if(stopped)return;
       const previous=seenRooms.get(entry.code);
       if(previous&&previous.version>=next.version&&(previous.chatVersion??0)>=(next.chatVersion??0))return;
       seenRooms.set(entry.code,next);
@@ -595,36 +613,44 @@ async function monitorRooms() {
         toast('Tocca a te · '+(next.roomName||catalog[next.game.id].name));
       else if(previous&&unreadChat(next,Math.max(chatCursor(entry.code),previous.chatVersion??0)).length)
         toast('Nuovo messaggio · '+(next.roomName||catalog[next.game.id].name));
-      paintRooms();
+      scheduleRoomPaint();
       if(next.closed||next.game.result!==null) {
-        monitors.get(entry.code)?.();
+        stop();
       }
       // The computer also answers in rooms that are only listed here, so "Tocca a te" shows up.
-      if(next.botTurn>=0)setTimeout(()=>{
+      clearTimeout(botTimer);
+      if(!stopped&&next.botTurn>=0)botTimer=setTimeout(()=>{
         if(seenRooms.get(entry.code)?.version===next.version)api('/bot',{version:next.version,...(botQuick?{quick:true}:{})},entry.code,entry.token).then(receive).catch(()=>{});
       },1500);
     };
-    const get=()=>api('',undefined,entry.code,entry.token);
-    monitors.set(entry.code,()=>{});
+    const get=roomReader(entry.code,entry.token);
     try {
       const next=await get();
       receive(next);
       if(!next.closed&&next.game.result===null) {
         await settings;
-        if(seenRooms.get(entry.code)?.closed)return;
-        monitors.set(entry.code,watchRoom(entry,transport,receive,get));
+        if(stopped)return;
+        unsubscribe=watchRoom(entry,transport,receive,get);
       }
     } catch(error) {
+      if(stopped)return;
       unavailable.add(entry.code);
       if(!error.status) {
         monitors.delete(entry.code);
         setTimeout(monitorRooms,5000);
       }
-      paintRooms();
+      scheduleRoomPaint();
     }
   }));
 }
-addEventListener('storage',e=>{if(e.key?.startsWith('tavolo:')) {paintRooms();monitorRooms();}});
+addEventListener('storage',e=>{
+  if(e.key===null||/^tavolo:[a-f0-9]{24}$/.test(e.key)){
+    for(const [key,stop] of monitors)if(e.key==='tavolo:'+key||!localStorage.getItem('tavolo:'+key)){
+      stop();monitors.delete(key);seenRooms.delete(key);unavailable.delete(key);
+    }
+    paintRooms();monitorRooms();
+  }else if(e.key.startsWith('tavolo:chat-read:'))paintRooms();
+});
 addEventListener('pagehide',()=>{stopLive?.();for(const stop of monitors.values())stop();monitors.clear();});
 addEventListener('pageshow',e=>{if(e.persisted){restoreRoom();monitorRooms();}});
 let tabChanged=false;
@@ -745,7 +771,7 @@ function navyGrid(ships,shots,target,placing) {
 }
 function showStrike(shot) {
   const target=app.querySelector('.own-grid [data-naval="'+shot.at+'"]');
-  if(!target||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  if(!target||!fx.lively()||document.hidden)return;
   const fx=document.createElement('span');
   fx.className='sea-strike '+(shot.hit?'strike-hit':'strike-water');
   fx.setAttribute('aria-hidden','true');
@@ -757,7 +783,7 @@ let draggedMove=false;
 const pieceHtml=p=>chessPiece(p,state?.chessStyle?.id);
 const discHtml=v=>'<span class="disc p'+((v-1)%2+1)+'">'+(v>=3?'♛':'')+'</span>';
 function boardSnapshot(id) {
-  if(id!=='nim'||!fx.lively())return null;
+  if(id!=='nim'||!fx.lively()||document.hidden||tab!=='play')return null;
   return Array.from(app.querySelectorAll('.nim-row'),row=>Array.from(row.querySelectorAll('.cell'),el=>el.getBoundingClientRect()));
 }
 // What a move sounds like. Sounds follow the same events as the effects, but they also play
@@ -1046,28 +1072,15 @@ app.addEventListener('change',event=>{
   render();
 });
 // Seats around the card table: you sit at the bottom, the others follow clockwise from your left.
-function seatSpot(k,total,tall=false) {
-  if(k===0)return {x:0,y:1};
-  if(tall&&total>5) {
-    // A narrow table is taller than wide: a big company sits along its two long sides and the top.
-    const height=1.5, low=height/2, side=height+low, d=(k-1)/(total-2)*(2*side+2);
-    if(d<=side)return {x:-1,y:(low-d)/height};
-    if(d<=side+2)return {x:d-side-1,y:-1};
-    return {x:1,y:(d-side-2-height)/height};
-  }
-  const others=total-1, span=others<=3?180:224, angle=(270-span/2+span*k/(others+1))*Math.PI/180;
-  const curve=v=>Math.sign(v)*Math.sqrt(Math.abs(v));
-  return {x:curve(Math.cos(angle)),y:curve(Math.sin(angle))};
-}
 // `custom` lets a game replace what a seat shows: detail (text under the name), fan (cards and
 // chips in front of the seat), badge, state (extra classes), spot (chips bet on the felt) and turn.
 function tableSeats(g,custom={}) {
   const total=state.maxPlayers??2, waiting=state.players.length<total;
-  // Same threshold as the stylesheet's narrow table.
-  const tall=(app.querySelector('.match')?.clientWidth??app.clientWidth)<=680;
+  const positions=seatPositions(total);
+  const position=seat=>positions[(seat-state.side+total)%total];
   let spots='';
   const seats=Array.from({length:total},(_,seat)=>{
-    const {x,y}=seatSpot((seat-state.side+total)%total,total,tall);
+    const {x,y,style,onAxis}=position(seat);
     const occupied=seat<state.players.length, own=seat===state.side&&!state.spectator;
     const count=g.handCounts?.[seat]??(own?g.hand.length:g.opponentCount??0);
     const info={seat,occupied,own,count,waiting,x,y};
@@ -1077,19 +1090,21 @@ function tableSeats(g,custom={}) {
     const shown=own||!occupied?0:Math.min(count,7);
     const fan=custom.fan?custom.fan(info):shown?'<span class="seat-cards" aria-hidden="true">'+Array.from({length:shown},(_,i)=>'<i class="pile-back '+g.id+'" style="--o:'+(i-(shown-1)/2).toFixed(1)+'"></i>').join('')+'</span>':'';
     const name=occupied?displayNickname(state.players[seat],state.playerMarkup?.[seat]):'Posto libero';
+    const uno=g.id==='uno'&&occupied&&!waiting&&count===1;
     // Bets lie on the felt in front of their seat; a seat in the middle keeps clear of the cards.
-    const middle=Math.abs(x)<.3;
-    if(custom.spot)spots+='<span class="bet-spot" data-bet="'+seat+'" style="--bx:'+(x*27-(middle?8:0)).toFixed(1)+';--by:'+(y*(middle?30:24)).toFixed(1)+'">'+custom.spot(info)+'</span>';
-    return '<li class="seat'+(own?' me':'')+(occupied?'':' vacant')+(custom.state?.(info)??'')+'" data-other="'+seat+'" style="--x:'+x.toFixed(3)+';--y:'+y.toFixed(3)+'"'+(seatHasTurn(state,seat)&&custom.turn!==null?' aria-current="true"':'')+'>'+
-      '<span class="seat-plate"><span class="avatar seat-'+seat+'" aria-hidden="true">'+(occupied?initial(state.players[seat],state.playerMarkup?.[seat]):'+')+'</span>'+
-      '<span class="seat-info"><strong>'+name+(own?' (tu)':'')+(occupied?botTag(state,seat):'')+'</strong><small>'+details+'</small></span>'+
-      (occupied&&!custom.detail?'<b class="seat-count" aria-hidden="true">'+count+'</b>':'')+(custom.badge?.(info)??'')+
-      (g.id==='uno'&&occupied&&!waiting&&count===1?'<b class="uno-call">UNO!</b>':'')+'</span>'+fan+'</li>';
+    if(custom.spot)spots+='<span class="bet-spot'+(onAxis?' on-axis':'')+'" data-bet="'+seat+'" style="'+style+'">'+custom.spot(info)+'</span>';
+    const title=occupied?escape(state.players[seat]+(own?' (tu)':'')):'';
+    const plate=occupied?'<button type="button" class="seat-plate" data-seat-info="'+seat+'" aria-haspopup="dialog" aria-label="Posto '+(seat+1)+' · '+title+'" title="'+title+'">':'<span class="seat-plate">';
+    return '<li class="seat'+(own?' me':'')+(onAxis?' on-axis':'')+(occupied?'':' vacant')+(custom.state?.(info)??'')+'" data-other="'+seat+'" style="'+style+'"'+(seatHasTurn(state,seat)&&custom.turn!==null?' aria-current="true"':'')+'>'+
+      plate+'<span class="avatar seat-'+seat+'" aria-hidden="true">'+(occupied?initial(state.players[seat],state.playerMarkup?.[seat]):'+')+'</span>'+
+      '<span class="seat-info"><strong>'+name+(own?' (tu)':'')+(occupied?botTag(state,seat):'')+'</strong><small>'+(uno?'<b class="uno-call">UNO!</b> ':'')+details+'</small></span>'+
+      (occupied&&!custom.detail?'<b class="seat-count'+(uno?' calling':'')+'" aria-hidden="true">'+(uno?'UNO!':count)+'</b>':'')+(custom.badge?.(info)??'')+
+      (occupied?'</button>':'</span>')+fan+'</li>';
   }).join('');
   // A marker rests on the felt in front of whoever must play; poker puts the dealer button there instead.
   const markerSeat=custom.marker!==undefined?custom.marker:custom.turn!==undefined?custom.turn:(!waiting&&g.result===null&&!state.closed?g.turn:null);
-  const turn=Number.isInteger(markerSeat)?seatSpot((markerSeat-state.side+total)%total,total,tall):null;
-  const marker=turn?'<i class="turn-chip'+(custom.marker!==undefined?' dealer-button':'')+'" aria-hidden="true" style="--cx:'+(turn.x*36+(Math.abs(turn.x)<.3?13:0)).toFixed(1)+';--cy:'+(turn.y*33).toFixed(1)+'"></i>':'';
+  const turn=Number.isInteger(markerSeat)?position(markerSeat):null;
+  const marker=turn?'<i class="turn-chip'+(turn.onAxis?' on-axis':'')+(custom.marker!==undefined?' dealer-button':'')+'" aria-hidden="true" style="'+turn.style+'"></i>':'';
   return '<ul class="table-seats'+(total>5?' compact':'')+'" aria-label="Giocatori al tavolo">'+seats+'</ul>'+spots+marker;
 }
 // Chips in columns of five. The last `incoming` chips are still on their way from the bank.
@@ -1156,7 +1171,7 @@ function cardFlightScope() {
   return state&&tab==='play'&&connected?[code,state.version,scopaDeck,cardHints,chatOpen,movesOpen].join('/'):'';
 }
 function afterTable(scope,delay,run) {
-  setTimeout(()=>{if(scope&&scope===cardFlightScope()&&!document.hidden&&fx.lively())run();},delay);
+  fx.afterMotion(delay,()=>{if(scope&&scope===cardFlightScope())run();});
 }
 function cardSnapshot() {
   if(!fx.lively()||document.hidden||tab!=='play')return null;
@@ -1651,7 +1666,7 @@ function render() {
   const deckFocused=focused?.id==='scopa-deck'?'scopa-deck':null;
   const chatFocused=focused?.id==='chat-input', cursor=chatFocused?focused.selectionStart:null;
   const richFocused=focused?.id==='chat-input-rich', richAt=richFocused?rich.getOffsets(focused):null;
-  const focusData=focused?.closest('#app')&&Object.entries(focused.dataset).find(([key])=>['tab','cell','action','naval','discard','poker','hand','memory'].includes(key));
+  const focusData=focused?.closest('#app')&&Object.entries(focused.dataset).find(([key])=>['tab','cell','action','naval','discard','poker','hand','memory','seatInfo'].includes(key));
   const entry=restoring?'<section class="entry"><h1>Caricamento partita…</h1></section>':
     expired?'<section class="entry"><h1>Stanza non disponibile</h1><p>La partita potrebbe essere scaduta o il server locale potrebbe essere stato riavviato.</p><a class="primary" href="/">Torna alla Home</a></section>':
     restoreError?'<section class="entry"><h1>Connessione interrotta</h1><p>'+restoreError+'</p><button class="primary" data-action="restore">Riprova</button></section>':
@@ -1724,7 +1739,7 @@ async function send(action) {
   app.querySelector('.room-layout')?.classList.remove('your-turn');
   for(const control of app.querySelectorAll('.match button:enabled,.match input:enabled,.close-game,.closure-notice button')) {
     if(control.hasAttribute('data-memory'))control.setAttribute('aria-disabled','true');
-    else if(!control.closest('.banner-row,.navy-switch,.pile-inspect,.memory-header'))control.disabled=true;
+    else if(!control.closest('.banner-row,.navy-switch,.pile-inspect,.memory-header,.seat-plate'))control.disabled=true;
   }
   updateTitle();
   let answer=null, failure=null;
@@ -2063,6 +2078,16 @@ app.addEventListener('click',async e=>{
   if(ignoreClick)return;
   const b=e.target.closest('button');if(!b)return;
   const d=b.dataset;
+  if(d.seatInfo!==undefined){
+    const seat=Number(d.seatInfo), label=b.querySelector('.seat-info small').textContent, roomCode=code;
+    showModal('<div class="seat-details"><h2 id="seat-details-title">'+displayNickname(state.players[seat],state.playerMarkup?.[seat])+'</h2><p>Posto '+(seat+1)+(seat===state.side&&!state.spectator?' · Tu':'')+(state.bots?.[seat]?' · Computer':'')+'</p><p>'+escape(label)+'</p></div>');
+    modal.setAttribute('aria-labelledby','seat-details-title');
+    modal.addEventListener('close',()=>{
+      modal.removeAttribute('aria-labelledby');
+      if(document.activeElement===document.body&&code===roomCode)app.querySelector('[data-seat-info="'+seat+'"]')?.focus({preventScroll:true});
+    },{once:true});
+    return;
+  }
   if(d.action==='chess-style'){openChessPicker();return;}
   if(d.memory!==undefined) {
     if(acting()&&b.getAttribute('aria-disabled')==='false')send({at:Number(d.memory)});
@@ -2619,15 +2644,15 @@ const soundToggle=document.querySelector('#sound-toggle');
 function syncSoundToggle() {
   const on=sound.soundOn();
   soundToggle.setAttribute('aria-pressed',String(on));
-  soundToggle.innerHTML=icon(on?'sound':'mute');
-  soundToggle.title=on?'Suoni attivi · clic per silenziarli':'Suoni spenti · clic per attivarli';
+  soundToggle.querySelector('.sound-label').textContent=on?'Audio':'Muto';
+  soundToggle.title=on?'Disattiva tutti i suoni':'Attiva tutti i suoni';
 }
 soundToggle.addEventListener('click',()=>{
   sound.setSound(!sound.soundOn());
-  syncSoundToggle();
-  toast(sound.soundOn()?'Suoni attivi.':'Suoni spenti.');
-  sound.play('chime',{delay:60});
+  toast(sound.soundOn()?'Audio attivo.':'Tutti i suoni sono disattivati.');
+  if(sound.soundOn())sound.play('chime',{delay:60});
 });
+sound.onSoundChange(syncSoundToggle);
 syncSoundToggle();
 // Game tiles lean towards the pointer and catch the lamp light.
 let hoverFrame=0, hoverTile=null, hoverX=0, hoverY=0;

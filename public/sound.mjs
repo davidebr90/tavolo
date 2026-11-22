@@ -4,12 +4,55 @@
 const KEY='tavolo:sound', VOLUME=.5;
 let context=null, master=null, grain=null;
 const recent=new Map();
-function stored() {try {return localStorage.getItem(KEY);} catch {return null;}}
-export const soundOn=()=>stored()!=='off';
+const active=new Set(), changes=new EventTarget();
+function stored() {try {return localStorage.getItem(KEY);} catch {return undefined;}}
+const initial=stored();
+let enabled=initial!=='off', known=initial==='off'||initial==='on', channel;
+export const soundOn=()=>enabled;
+export function onSoundChange(listener) {
+  changes.addEventListener('change',listener);
+  return ()=>changes.removeEventListener('change',listener);
+}
+function applySound(on) {
+  if(enabled===on)return;
+  enabled=on;
+  if(master)master.gain.value=on?VOLUME:0;
+  if(!on){
+    // Web Audio starts delayed effects on its own clock, even across a mute/unmute.
+    for(const source of active){source.disconnect();source.stop();}
+    active.clear();
+    recent.clear();
+  }
+  changes.dispatchEvent(new Event('change'));
+}
 export function setSound(on) {
-  try {localStorage.setItem(KEY,on?'on':'off');} catch {}
+  known=true;
+  applySound(on);
+  try {localStorage.setItem(KEY,on?'on':'off');} catch {channel?.postMessage({on});}
   if(on)wake();
-  else if(master)master.gain.value=0;
+}
+if(typeof window!=='undefined'){
+  window.addEventListener('storage',event=>{
+    if(event.key!==KEY&&event.key!==null)return;
+    const value=stored();
+    if(value===undefined)return;
+    known=value==='off'||value==='on';
+    applySound(value!=='off');
+  });
+  // If storage is unavailable, open tabs can still share the switch. A new
+  // tab can ask for the choice made during this browser session.
+  if(window.BroadcastChannel)try {
+    channel=new window.BroadcastChannel(KEY);
+    channel.onmessage=({data})=>{
+      if(data==='query'){
+        if(known)channel.postMessage({on:enabled,initial:true});
+      }else if(typeof data?.on==='boolean'&&(!data.initial||!known)){
+        known=true;
+        applySound(data.on);
+      }
+    };
+    if(!known)channel.postMessage('query');
+  } catch {channel=null;}
 }
 function wake() {
   const Audio=globalThis.AudioContext??globalThis.webkitAudioContext;
@@ -18,17 +61,20 @@ function wake() {
     context=new Audio();
     master=context.createGain();
     master.connect(context.destination);
-    // One second of noise, reused by every rustle, click and splash.
-    grain=context.createBuffer(1,context.sampleRate,context.sampleRate);
-    const data=grain.getChannelData(0);
-    for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
+    master.gain.value=VOLUME;
   }
-  master.gain.value=VOLUME;
-  if(context.state==='suspended')context.resume().catch(()=>{});
+  if(context.state==='suspended'||context.state==='interrupted')context.resume().catch(()=>{});
   return context;
 }
 if(typeof document!=='undefined') {
-  for(const type of ['pointerdown','keydown'])document.addEventListener(type,()=>{if(soundOn())wake();},{passive:true,capture:true});
+  const unlock=event=>{
+    if(enabled&&context?.state!=='running'&&!event.target?.closest?.('#sound-toggle'))wake();
+  };
+  for(const type of ['pointerdown','keydown'])document.addEventListener(type,unlock,{passive:true,capture:true});
+}
+function track(source) {
+  active.add(source);
+  source.onended=()=>{active.delete(source);source.disconnect();};
 }
 // A pitched note that fades out; `to` bends the pitch while it sounds.
 function tone(at,{freq,to=freq,type='sine',dur=.12,gain=.25,attack=.004}) {
@@ -42,9 +88,15 @@ function tone(at,{freq,to=freq,type='sine',dur=.12,gain=.25,attack=.004}) {
   osc.connect(level).connect(master);
   osc.start(at);
   osc.stop(at+dur+.03);
+  track(osc);
 }
 // A burst of filtered noise; `to` sweeps the filter.
 function hiss(at,{freq,to=freq,kind='bandpass',q=1,dur=.08,gain=.2,attack=.003}) {
+  if(!grain){
+    grain=context.createBuffer(1,context.sampleRate,context.sampleRate);
+    const data=grain.getChannelData(0);
+    for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
+  }
   const source=context.createBufferSource(), filter=context.createBiquadFilter(), level=context.createGain();
   source.buffer=grain;
   filter.type=kind;
@@ -57,6 +109,7 @@ function hiss(at,{freq,to=freq,kind='bandpass',q=1,dur=.08,gain=.2,attack=.003})
   source.connect(filter).connect(level).connect(master);
   source.start(at,Math.random()*.8);
   source.stop(at+dur+.03);
+  track(source);
 }
 const vary=(value,spread=.06)=>value*(1+(Math.random()*2-1)*spread);
 const notes=(at,list,options)=>list.forEach(([freq,when,dur=.16],i)=>tone(at+when,{freq,dur,...options}));

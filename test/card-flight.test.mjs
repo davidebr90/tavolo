@@ -13,7 +13,7 @@ test('Announcements survive moves and resize, and clear with their queue when le
     Object.defineProperty(globalThis,key,{value,configurable:true});
     t.after(()=>original?Object.defineProperty(globalThis,key,original):delete globalThis[key]);
   }
-  const {syncAnnouncements,syncCardFlights,announce,setMotionLevel}=await import('../public/motion.mjs?announcements');
+  const {syncAnnouncements,syncCardFlights,announce,setMotionLevel,afterMotion}=await import('../public/motion.mjs?announcements');
   t.mock.timers.enable({apis:['setTimeout']});
   const room={game:{id:'scopa'},version:4,games:1};
   const queueTwo=()=>{announce('A',{hold:100});announce('B',{hold:100});};
@@ -46,14 +46,22 @@ test('Announcements survive moves and resize, and clear with their queue when le
   }
   syncAnnouncements('a',room,'play');
   queueTwo();
+  let lateEffects=0;
+  afterMotion(200,()=>lateEffects++);
   doc.hidden=true;
   doc.dispatchEvent(new Event('visibilitychange'));
   doc.hidden=false;
   cleared();
+  assert.equal(lateEffects,0);
   queueTwo();
+  afterMotion(200,()=>lateEffects++);
   setMotionLevel('calm');
   setMotionLevel('full');
   cleared();
+  assert.equal(lateEffects,0);
+  afterMotion(200,()=>lateEffects++);
+  t.mock.timers.tick(200);
+  assert.equal(lateEffects,1);
 });
 
 test('A card keeps its destination hidden across renders and reveals it exactly at arrival',async t=>{
@@ -82,7 +90,7 @@ test('A card keeps its destination hidden across renders and reveals it exactly 
     Object.defineProperty(globalThis,key,{value,configurable:true});
     t.after(()=>original?Object.defineProperty(globalThis,key,original):delete globalThis[key]);
   }
-  const {flight,syncCardFlights}=await import('../public/motion.mjs');
+  const {flight,syncCardFlights,playTableEffects}=await import('../public/motion.mjs');
   let destination=new Element();
   const hidden=()=>destination.classList.values.has('awaiting-card');
   const rect={left:0,top:10,width:20,height:32};
@@ -97,6 +105,38 @@ test('A card keeps its destination hidden across renders and reveals it exactly 
   await Promise.resolve();
   assert.equal(hidden(),false);
   assert.equal(overlays.size,0);
+  // All dealt cards are reserved together. Launch only the cards due now;
+  // retain the scroll basis measured for the batch if the user scrolls.
+  t.mock.timers.enable({apis:['setTimeout']});
+  let now=100;
+  t.mock.method(performance,'now',()=>now);
+  const beforeScroll=Object.getOwnPropertyDescriptor(globalThis,'scrollY');
+  Object.defineProperty(globalThis,'scrollY',{configurable:true,writable:true,value:125});
+  t.after(()=>beforeScroll?Object.defineProperty(globalThis,'scrollY',beforeScroll):delete globalThis.scrollY);
+  playTableEffects([()=>flight({...options,delay:80}),()=>flight({...options,delay:160})]);
+  assert.ok(hidden());
+  assert.equal(overlays.size,0);
+  globalThis.scrollY=240;
+  now+=80;
+  t.mock.timers.tick(80);
+  assert.equal(overlays.size,1);
+  assert.equal([...overlays][0].style.top,'125px');
+  animations.at(-1).complete();
+  await Promise.resolve();
+  assert.ok(hidden());
+  assert.equal(overlays.size,0);
+  syncCardFlights('room/2');
+  now+=500;
+  t.mock.timers.tick(500);
+  assert.equal(hidden(),false);
+  assert.equal(overlays.size,0);
+  const count=animations.length;
+  flight({...options,delay:80,duration:150});
+  assert.ok(hidden());
+  now+=400;
+  t.mock.timers.tick(400);
+  assert.equal(hidden(),false);
+  assert.equal(animations.length,count);
   flight(options);
   syncCardFlights('room/2');
   assert.equal(hidden(),false);

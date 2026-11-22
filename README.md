@@ -6,6 +6,8 @@ In **Memory · Atlante degli uccelli** da due a quattro giocatori cercano dodici
 
 ## Gioca a Tavolo
 
+Sui tavoli con i posti disposti intorno al tappeto puoi selezionare la targhetta di un giocatore per leggere il nickname completo e il suo stato. Da tastiera, raggiungi la targhetta con Tab, aprila con Invio e torna al posto con Esc.
+
 Negli **Scacchi** il pulsante **Stile scacchi** cambia insieme la scacchiera e i pezzi per tutta la stanza. Entrambi i giocatori possono scegliere Classico, Intarsio, Art Déco o Nordico anche durante il turno dell’altro. Nel pannello **Mosse**, le due colonne distinguono Bianco e Nero e una piccola figura accanto alla notazione indica il pezzo catturato.
 
 Crea una stanza, copia il link d'invito e mandalo agli altri giocatori. Se vuoi giocare subito, scegli **Computer** sulla scheda del gioco. In **Partite in corso** trovi le stanze, i nickname e il turno. Per giocare online serve un'istanza di Tavolo pubblicata come indicato sotto.
@@ -72,13 +74,15 @@ Chi apre il link di una stanza può scegliere **Guarda soltanto**. Dalla stanza,
 
 ## Suoni
 
-Carte, fiches, pedine, dadi e colpi in mare hanno un suono, generato dal browser senza scaricare file. Il pulsante con l'altoparlante in alto li spegne e la scelta resta su questo dispositivo. I suoni partono solo dopo il primo clic o tasto, come richiedono i browser.
+Carte, fiches, pedine, dadi e colpi in mare hanno un suono generato dal browser. Un clic sull’altoparlante in alto interrompe tutti i suoni, anche quelli già programmati. Un secondo clic li riattiva. Le schede aperte condividono la scelta e il browser la ricorda alla riapertura. I suoni partono dopo il primo clic o tasto.
 
 ## Verifica
 
 ```powershell
 node --test
 ```
+
+Il test visivo dei testi lunghi usa Chromium attraverso Playwright. Se Playwright e il suo browser sono installati, abilitalo con `$env:TAVOLO_BROWSER_TEST='1'`. Puoi usare un Chrome già presente indicando il percorso dell’eseguibile in `TAVOLO_CHROME`, oppure un’installazione esterna di Playwright indicando l’URL del modulo in `TAVOLO_PLAYWRIGHT_MODULE`.
 
 I test coprono motori, accesso ai posti, mosse concorrenti e duplicate e isolamento delle stanze. Per includere l'integrazione HTTP/SSE su un PC con loopback disponibile, esegui `$env:TAVOLO_HTTP_TEST='1'; node --test`. Il runtime Cloudflare e la rete aziendale vanno verificati dopo il deploy. Il test concorrente è funzionale e non misura la capacità in produzione.
 
