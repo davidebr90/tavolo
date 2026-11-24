@@ -16,6 +16,10 @@
 <link rel="stylesheet" href="/chess-styles.css">
 <link rel="stylesheet" href="/chess-picker.css">
 <link rel="stylesheet" href="/chess-history.css">
+<link rel="stylesheet" href="/mobile.css">
+<link rel="stylesheet" href="/header-mobile.css">
+<link rel="stylesheet" href="/cards-mobile.css">
+<link rel="stylesheet" href="/naval-mobile.css">
 <link rel="modulepreload" href="/catalog.mjs">
 <link rel="modulepreload" href="/rooms.mjs">
 <link rel="modulepreload" href="/motion.mjs">
@@ -25,8 +29,8 @@
 <script type="module" src="/app.mjs"></script>
 </head>
 <body>
-<header class="top"><div class="shell top-inner"><div class="brand-group"><a class="brand" href="/" aria-label="Tavolo, Home"><span class="logomark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Tavolo<span class="dot">.</span></a><p class="release" id="release" hidden></p></div><nav class="top-nav" aria-label="Navigazione principale"><button class="outline fx-toggle" type="button" id="fx-toggle" aria-label="Effetti visivi" aria-pressed="true"><span class="fx-glyph" aria-hidden="true">✦</span></button><button class="outline sound-toggle" type="button" id="sound-toggle" aria-label="Audio del sito" aria-pressed="true" title="Disattiva tutti i suoni">
-<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 9h4l6-5v16l-6-5H3Z" fill="currentColor"/><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path class="sound-waves" d="M16 9a4.6 4.6 0 0 1 0 6m3-9a8.5 8.5 0 0 1 0 12"/><path class="sound-cross" d="m17 9 5 6m0-6-5 6"/></g></svg><span class="sound-label" aria-hidden="true">Audio</span></button><a class="outline home-nav" href="/"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 10 9-7 9 7v10h-6v-6H9v6H3z"/></svg><span class="nav-label">Home</span><span id="turn-count" hidden></span></a><button class="outline" id="join-room" aria-label="Entra in una stanza"><span class="nav-label">Entra in una stanza</span></button></nav></div></header>
+<header class="top"><div class="shell top-inner"><div class="brand-group"><a class="brand" href="/" aria-label="Tavolo, Home"><span class="logomark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Tavolo<span class="dot">.</span></a><p class="release" id="release" hidden></p></div><h1 id="compact-room-title"></h1><nav class="top-nav" aria-label="Navigazione principale"><button class="outline fx-toggle" type="button" id="fx-toggle" aria-label="Effetti visivi" aria-pressed="true"><span class="fx-glyph" aria-hidden="true">✦</span></button><button class="outline sound-toggle" type="button" id="sound-toggle" aria-label="Audio del sito" aria-pressed="true" title="Disattiva tutti i suoni">
+<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 9h4l6-5v16l-6-5H3Z" fill="currentColor"/><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path class="sound-waves" d="M16 9a4.6 4.6 0 0 1 0 6m3-9a8.5 8.5 0 0 1 0 12"/><path class="sound-cross" d="m17 9 5 6m0-6-5 6"/></g></svg><span class="sound-label" aria-hidden="true">Audio</span></button><a class="outline home-nav" href="/"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 10 9-7 9 7v10h-6v-6H9v6H3z"/></svg><span class="nav-label">Home</span><span id="turn-count" hidden></span></a><button class="outline" id="join-room" aria-label="Entra in una stanza"><span class="nav-label">Entra in una stanza</span></button><button type="button" class="outline" id="room-menu-toggle" aria-controls="room-commands" aria-expanded="false" aria-label="Menu partita"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg><span>Menu</span></button></nav></div></header><div id="room-menu-scrim" aria-hidden="true"></div>
 <main class="shell" id="app"></main>
 <dialog id="modal"></dialog>
 <div class="toast" role="status" id="toast" hidden></div>

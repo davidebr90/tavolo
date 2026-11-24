@@ -43,6 +43,14 @@ export function chipPile(amount,kind='') {
     Array.from({length:size},(_,i)=>'<i class="chip" style="--i:'+i+'"></i>').join('')+'</span>').join('')+'</span>';
 }
 
+export function pokerRaiseForm(g,raiseTo,inputId='raise-to') {
+  const {minRaiseTo:min,maxRaiseTo:max,call}=g.legal;
+  const quick=[['Minimo',min],['Piatto',Math.min(max,Math.max(min,g.pot+(call??0)*2))],['All-in',max]]
+    .filter(([,value],i,list)=>list.findIndex(([,other])=>other===value)===i)
+    .map(([label,value])=>'<button type="button" class="link" data-raise-set="'+value+'">'+label+' · '+value+'</button>').join('');
+  return '<form class="poker-raise"><label for="'+inputId+'">'+(g.bets.some(n=>n>0)?'Rilancia a':'Punta a')+'</label><input id="'+inputId+'" aria-label="Puntata totale in fiches" type="number" inputmode="numeric" required step="1" min="'+min+'" max="'+max+'" value="'+(raiseTo??min)+'"><button class="outline">Conferma puntata</button><span class="raise-quick">'+quick+'</span></form>';
+}
+
 export function pokerTable(room,{active,escape,selected,raiseTo,tableSeats}) {
   const {game:g,side,players}=room;
   const waiting=players.length<room.maxPlayers, texas=g.id==='texas-holdem';
@@ -57,7 +65,7 @@ export function pokerTable(room,{active,escape,selected,raiseTo,tableSeats}) {
       if(!occupied)return 'Posto libero';
       const stack=waiting?g.stacks[seat]+g.contributions[seat]:g.stacks[seat];
       const status=waiting?'':!g.handCounts[seat]&&!done?'Eliminato':done?(showdown?.labels?.[seat]??(winners.has(seat)?'Vince il piatto':'')):g.folded[seat]?'Lascia':stack===0?'All-in':'';
-      return '<b class="stack-amount">'+stack+'</b><span class="stack-unit"> fiches</span>'+(status?'<span class="stack-status"> · '+escape(status)+'</span>':'')+(!waiting&&g.dealer===seat?'<span class="sr-only"> · mazziere</span>':'');
+      return '<b class="stack-amount">'+stack+'</b><span class="stack-unit"> fiches</span>'+(status?'<span class="stack-status"> · '+escape(status)+'</span>':'')+(!waiting&&g.dealer===seat?'<span class="mobile-dealer"> · mazziere</span>':'')+(!waiting&&g.bets[seat]>0?'<span class="compact-bet"> · sul piatto '+g.bets[seat]+'</span>':'');
     },
     // Each player's chips stand on their own place at the rail.
     badge:({seat,occupied})=>occupied&&!waiting?'<span class="seat-stack" data-stack="'+seat+'">'+chipPile(g.stacks[seat],'mini')+'</span>':'',
@@ -75,13 +83,11 @@ export function pokerTable(room,{active,escape,selected,raiseTo,tableSeats}) {
   const board=texas?(g.board.length?g.board.map((card,i)=>'<span class="board-card" data-board-card="'+card+'" style="--tilt:'+((i*37%5-2)*.8).toFixed(1)+'deg">'+cardFace(card)+'</span>').join(''):
     '<span class="board-hint">'+(waiting?'':'Il flop si scopre dopo il primo giro di puntate.')+'</span>'):'';
   const action=(type,label,cls='outline')=>'<button type="button" class="'+cls+'" data-poker="'+type+'">'+label+'</button>';
-  const pot=waiting?0:g.pot, min=legal.minRaiseTo, max=legal.maxRaiseTo;
-  const quick=canRaise?[['Minimo',min],['Piatto',Math.min(max,Math.max(min,pot+(legal.call??0)*2))],['All-in',max]].filter(([,value],i,list)=>list.findIndex(([,other])=>other===value)===i)
-    .map(([label,value])=>'<button type="button" class="link" data-raise-set="'+value+'">'+label+' · '+value+'</button>').join(''):'';
+  const pot=waiting?0:g.pot;
   const controls=[
     legal.check&&action('check',g.phase==='opening'?'Passa senza aprire':'Check'),
     legal.call>0&&action('call','Vedi · '+legal.call,'primary'),
-    canRaise&&'<form class="poker-raise"><label for="raise-to">'+(g.bets.some(n=>n>0)?'Rilancia a':'Punta a')+'</label><input id="raise-to" aria-label="Puntata totale in fiches" type="number" inputmode="numeric" required step="1" min="'+min+'" max="'+max+'" value="'+(raiseTo??min)+'"><button class="outline">Conferma puntata</button><span class="raise-quick">'+quick+'</span></form>',
+    canRaise&&('<button type="button" class="outline compact-card-action" data-action="choose-bet" aria-haspopup="dialog">'+(g.bets.some(n=>n>0)?'Rilancia':'Punta')+'</button>'+pokerRaiseForm(g,raiseTo)),
     legal.fold&&action('fold','Lascia'),
     draw&&action('draw',selected.size?'Cambia '+selected.size+(selected.size===1?' carta':' carte'):'Servito · tieni le cinque carte','primary'),
     legal.next&&action('next','Distribuisci la prossima mano','primary')
@@ -102,6 +108,5 @@ export function pokerTable(room,{active,escape,selected,raiseTo,tableSeats}) {
     '<div class="felt-side right"><div class="poker-pot" data-pot role="img" aria-label="Piatto: '+pot+' fiches">'+(done?'':chipPile(pot))+'<span>'+(done?'Piatto assegnato':'Piatto')+' <b>'+pot+'</b></span></div></div>'+
     '</div></div></div>'+seats+'</div></div>'+
     (waiting?'<p class="card-hint">Le carte si distribuiscono quando tutti i posti sono occupati.</p>':'')+
-    (hole?'<h3 class="sr-only">Le tue carte</h3>'+(draw?'<p class="card-hint">Seleziona fino a '+legal.draw+' carte da cambiare.</p>':'')+'<div class="card-line hand fan pocket">'+hole+'</div>':'')+
-    (controls?'<div class="poker-controls">'+controls+'</div>':'')+outcomes+'</div>';
+    (hole||controls?'<div class="card-player"><div class="pocket-help">'+(draw?'Seleziona fino a '+legal.draw+' carte da cambiare.':'')+'</div><h3 class="sr-only">Le tue carte</h3><div class="card-line hand fan pocket" data-scroll-key="hand">'+hole+'</div><div class="poker-controls">'+controls+'</div></div>':'')+outcomes+'</div>';
 }

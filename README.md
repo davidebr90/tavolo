@@ -6,6 +6,10 @@ In **Memory · Atlante degli uccelli** da due a quattro giocatori cercano dodici
 
 ## Gioca a Tavolo
 
+Sul telefono la barra in alto tiene a portata di mano audio e **Menu**. Dal menu puoi invitare gli amici, leggere le regole e aprire la chat. Negli scacchi e nella dama trovi anche le mosse. Chiudi il pannello per tornare allo stesso punto della partita.
+
+In **Battaglia navale** lo scontro si apre sulle acque nemiche. Scorri il campo lateralmente o usa i due pulsanti per passare alla tua flotta. Se arriva un colpo mentre miri, il campo che hai scelto resta in vista.
+
 Sui tavoli con i posti disposti intorno al tappeto puoi selezionare la targhetta di un giocatore per leggere il nickname completo e il suo stato. Da tastiera, raggiungi la targhetta con Tab, aprila con Invio e torna al posto con Esc.
 
 Negli **Scacchi** il pulsante **Stile scacchi** cambia insieme la scacchiera e i pezzi per tutta la stanza. Entrambi i giocatori possono scegliere Classico, Intarsio, Art Déco o Nordico anche durante il turno dell’altro. Nel pannello **Mosse**, le due colonne distinguono Bianco e Nero e una piccola figura accanto alla notazione indica il pezzo catturato.
