@@ -18,5 +18,5 @@ export async function startRoomBrowser(t) {
   });
   const origin='http://127.0.0.1:'+String((await once(server.stdout,'data'))[0]).match(/porta (\d+)/)[1];
   browser=await chromium.launch({executablePath:process.env.TAVOLO_CHROME});
-  return {origin,browser};
+  return {origin,browser,directory};
 }

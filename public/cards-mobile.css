@@ -1,4 +1,4 @@
-.compact-card-action,.compact-bet{display:none}
+.compact-card-action,.compact-bet,.uno-draw-choice{display:none}
 .mobile-dealer{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 .pocket-help:not(:empty){margin-top:8px;text-align:center;font-size:.8rem;color:var(--muted)}
 .take-choices{display:grid;gap:8px;margin-block:12px 0}
@@ -96,6 +96,11 @@ dialog .raise-quick button{min-height:44px}
   .table-scopa .card-center .playing-card{height:clamp(46px,8svh,75px)}
   .table-scopa .card-center .caption-card{flex:0 1 auto;min-width:0;max-width:6rem}
   .table-briscola .card-center:has(.caption-card:nth-child(4)) .caption-card{max-width:23%}
+  .table-briscola .card-center{
+    display:grid;grid-template-rows:auto minmax(5.6rem,auto) minmax(2.1rem,auto);
+    align-items:center;align-content:center
+  }
+  .table-briscola .card-center .briscola-outcome{margin:0}
   .card-table .card-hint{display:none}
 
   /* The hand is a single reachable row, including a ten-card deal or a large
@@ -118,6 +123,9 @@ dialog .raise-quick button{min-height:44px}
   .poker-controls .poker-raise,.card-moves>[data-take]{display:none}
   .compact-card-action{display:inline-flex}
   .card-moves:empty::before{align-self:center;content:attr(data-hand-label);font-size:.77rem;color:var(--muted)}
+  .match[data-game-id=uno]:has(.uno-draw-choice)>.turn-note{display:none}
+  .table-uno .card-moves:not(:empty){display:grid;grid-template-columns:minmax(0,1fr) minmax(5.7rem,34%)}
+  .table-uno .uno-draw-choice{display:block;align-self:center;font-size:.78rem;line-height:1.2}
   .memory-table{margin:0 auto;padding:7px;grid-template-columns:minmax(0,1fr);grid-template-rows:auto;grid-template-areas:'title' 'cards' 'score';gap:6px}
   .memory-header{min-height:44px;align-items:center;padding:0 0 4px}
   .memory-title h2{font-size:1.05rem}
