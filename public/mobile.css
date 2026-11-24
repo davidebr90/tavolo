@@ -1,0 +1,72 @@
+.duel>.match-actions{grid-column:1/-1}
+.duel .cancel-selection:disabled,.duel>.match-actions:where(:has(>.cancel-selection:disabled:only-child)){display:none}
+.bg-command{display:contents}
+.compact-turn{display:none}
+
+/* Size the board against the space left by the mobile chrome. A short phone
+   in landscape has room beside the board for the players and controls. */
+@media (max-width:760px), (max-width:960px) and (max-height:540px){
+  #app:has(.room-layout){width:100%;padding:4px max(4px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left))}
+  #app .room-layout{border-radius:15px;overflow-anchor:none}
+  .room-layout .match{padding:6px}
+  .match>.banner-row{gap:5px;margin:0 0 6px;align-items:stretch}
+  .match .banner-row>.banner{flex:1 1 7rem;min-height:max(42px,2.65em);padding:4px 9px;gap:7px;font:700 .94rem/1.18 var(--text);letter-spacing:normal;border-radius:11px}
+  .match .banner i{width:8px;height:8px}
+  .match .full-turn{display:none}
+  .match .compact-turn{display:inline}
+  .match .chess-style-tool{align-self:stretch;min-height:44px;max-width:38%;padding:4px 9px;font-size:.8rem;line-height:1.2}
+  .match .chess-style-tool>span:first-child{position:absolute;clip-path:inset(50%);width:1px;height:1px;overflow:hidden}
+  .match .chess-style-tool strong{overflow-wrap:anywhere}
+  .match:has(>.duel){display:flex;flex-direction:column}
+  .match:has(>.duel)>.subnote{order:2;margin:6px 0 0}
+  .match>.duel{
+    --board-size:min(100cqi,max(11rem,calc(100svh - var(--room-header-height,52px) - 10.5rem)),36rem);
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:'board board' 'actions actions' 'top bottom';
+    grid-template-rows:auto auto auto;gap:0 6px;align-items:start}
+  .duel>.duel-board{grid-area:board}
+  .duel>.players{grid-template-columns:minmax(0,1fr);width:100%;margin:4px 0 0;min-width:0}
+  .duel>.players.top{grid-area:top}
+  .duel>.players.bottom{grid-area:bottom}
+  .duel .player{min-height:40px;display:grid;grid-template-columns:auto minmax(0,1fr);align-content:center;gap:2px 6px;padding:4px 7px;border-radius:12px}
+  .duel .player .avatar{width:25px;height:25px;font-size:.77rem}
+  .duel .player strong{font-size:.8rem;line-height:1.16}
+  .duel .player small{font-size:.67rem}
+  .duel .player .stat{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:4px;max-width:100%;padding:0;white-space:normal;text-align:start}
+  .duel .player .taken{white-space:nowrap}
+  .duel>.match-actions{grid-area:actions;margin:0;gap:5px;align-items:center;justify-content:center}
+  .match .duel>.match-actions:has(>.cancel-selection){display:flex;min-height:44px}
+  .match .duel .cancel-selection:disabled{display:inline-flex}
+  .duel :is(.match-actions,.strategy-actions) button{min-height:44px;line-height:1.2;padding:4px 10px}
+  .duel .strategy-actions{margin:4px 0;gap:4px 9px;font-size:.82rem;line-height:1.22;text-align:center}
+  .duel .strategy-actions:has([data-action=go-pass]){display:grid;grid-template-columns:minmax(0,1fr) auto;min-height:44px}
+  .duel .bg-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:84px;max-width:32rem;margin-inline:auto}
+  .duel .bg-command{display:grid;align-items:center}
+  .bg-dice{min-height:30px;display:grid;align-items:center;justify-content:center}
+  .duel .nim-row{min-height:50px;padding:4px 8px;gap:0}
+  .duel .nim-row strong{min-width:3.1rem;margin-right:3px}
+  .duel .nim-row .cell{width:clamp(24px,calc((100% - 3.4rem)/7),44px);height:42px;box-shadow:none;
+    background:linear-gradient(90deg,#b98a4e,#f1d39b 45%,#9a7238) center bottom/8px calc(100% - 9px) no-repeat}
+  .duel .nim-row .cell::before{width:13px;top:5px}
+  .duel .nim-row .move-preview::after{width:13px;top:-7px}
+  .duel .board.tris,.duel .dots-board{width:min(100%,var(--board-size),23rem)}
+  .duel .dots-board{--point-track:clamp(20px,6cqi,24px);grid-template:repeat(3,var(--point-track) 1fr) var(--point-track)/repeat(3,var(--point-track) 1fr) var(--point-track)}
+  .duel .dots-board .point{max-width:12px;max-height:12px;width:100%;height:100%;place-self:center}
+  .duel .dots-board .horizontal::before{inset:calc(50% - 3px) 2px}
+  .duel .dots-board .vertical::before{inset:2px calc(50% - 3px)}
+  .duel .board.four{width:min(100%,var(--board-size))}
+  .duel .nim-board,.duel .bg-board{width:min(100%,34rem);max-width:100%}
+  .duel .board.go{width:100%}
+}
+@media (orientation:landscape) and (max-width:960px) and (max-height:540px){
+  .match>.duel{
+    --board-size:min(100%,max(10rem,calc(100svh - var(--room-header-height,52px) - 4.8rem)));
+    grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);
+    grid-template-areas:'board top' 'board bottom' 'board strategy' 'board actions';
+    grid-template-rows:auto auto auto minmax(0,1fr);column-gap:10px}
+  .duel>.duel-board{display:contents}
+  .duel-board>:first-child{grid-area:board;align-self:start}
+  .duel-board>.strategy-actions{grid-area:strategy;width:100%}
+  .duel>.players{margin:0 0 3px}
+  .duel .nim-board{gap:5px}
+  .duel .bg-board{width:min(100%,calc(100svh - 7rem) * 1.65)}
+}

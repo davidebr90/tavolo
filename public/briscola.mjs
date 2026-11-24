@@ -53,5 +53,5 @@ export function renderBriscola(g,{side,players,deck,cardHints,active,playingCard
     '<div class="felt-side right">'+scores[1]+'</div>'+
     '</div></div></div>'+tableSeats(g)+'</div></div>'+
     (cardHints?'<small class="card-hint">Gioca con un doppio clic, trascina una carta o premi Invio.</small>':'')+
-    '<h3 class="sr-only">La tua mano</h3><div class="card-line hand fan" style="--n-half:'+((n-1)/2)+'">'+hand+'</div></div>';
+    '<div class="card-player"'+(waiting||watching?' hidden':'')+'><h3 class="sr-only">La tua mano</h3><div class="card-line hand fan" data-scroll-key="hand" style="--n-half:'+((n-1)/2)+'">'+hand+'</div></div></div>';
 }

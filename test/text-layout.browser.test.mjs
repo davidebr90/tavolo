@@ -1,29 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
-import {once} from 'node:events';
 import {randomBytes} from 'node:crypto';
-import {mkdtemp,rm} from 'node:fs/promises';
-import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {startRoomBrowser} from '../support/mobile-browser.mjs';
 
 // The ordinary suite is dependency-free. Opt in to measure text using a real
 // browser, where grid intrinsic sizes, rich markup and loaded fonts apply.
 test('Long names, turn banners and fleet controls stay inside their boxes', {
   skip:!process.env.TAVOLO_BROWSER_TEST, timeout:60000
 },async t=>{
-  const {chromium}=await import(process.env.TAVOLO_PLAYWRIGHT_MODULE||'playwright');
-  const directory=await mkdtemp(join(tmpdir(),'tavolo-layout-'));
-  const server=spawn(process.execPath,['dev.mjs'],{
-    cwd:new URL('..',import.meta.url),windowsHide:true,
-    env:{...process.env,PORT:'0',TAVOLO_ROOM_DIR:directory}
-  });
-  const exit=once(server,'exit');
-  t.after(async()=>{server.kill();await exit;await rm(directory,{recursive:true,force:true});});
-  const port=String((await once(server.stdout,'data'))[0]).match(/porta (\d+)/)[1];
-  const origin='http://127.0.0.1:'+port;
-  const browser=await chromium.launch({executablePath:process.env.TAVOLO_CHROME});
-  t.after(()=>browser.close());
+  const {origin,browser}=await startRoomBrowser(t);
   const page=await browser.newPage({reducedMotion:'reduce'});
   await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
   const host=randomBytes(32).toString('hex'), guest=randomBytes(32).toString('hex');
@@ -41,6 +26,7 @@ test('Long names, turn banners and fleet controls stay inside their boxes', {
     await page.evaluate(({code,seat})=>localStorage.setItem('tavolo:'+code,seat),{code,seat:joinGame?guest:host});
     await page.goto(origin+'/?stanza='+code);
     await page.locator('.room-layout').waitFor();
+    return code;
   }
   async function fits(selector){
     const elements=page.locator(selector);
@@ -62,11 +48,28 @@ test('Long names, turn banners and fleet controls stay inside their boxes', {
     await fits('.seat.me .seat-plate');
   }
   await page.setViewportSize({width:320,height:850});
-  await open('chess',true);
+  const chess=await open('chess',true);
   await fits('.banner');
   await fits('.player');
+  await t.test('The mobile chessboard and its controls keep their position across both players’ moves',async()=>{
+    await page.setViewportSize({width:320,height:568});
+    const board=page.locator('.chess-frame'), cancel=page.locator('[data-action="cancel"]');
+    const first=await board.boundingBox(), action=await cancel.boundingBox();
+    assert.ok(first.y>=0&&action.y+action.height<=568,'board and controls fit');
+    const snapshot=await (await fetch(origin+'/api/rooms/'+chess,{headers:{Authorization:'Bearer '+host}})).json();
+    await post(chess,host,'/moves',{version:snapshot.version,id:'mobile-e4',action:{from:52,to:36}});
+    await page.waitForFunction(()=>document.querySelector('.banner.green')?.textContent.includes('Tocca a te'));
+    await page.locator('[data-cell="12"]').click();
+    assert.equal(await cancel.isEnabled(),true);
+    assert.ok(Math.abs((await board.boundingBox()).y-first.y)<=1,'opponent move preserved the board');
+    assert.ok(Math.abs((await cancel.boundingBox()).y-action.y)<=1,'selection preserved the action');
+    await page.locator('[data-cell="28"]').click();
+    await page.locator('.banner.red').waitFor();
+    assert.ok(Math.abs((await board.boundingBox()).y-first.y)<=1,'own move preserved the board');
+    assert.equal(await page.evaluate(()=>scrollY),0);
+  });
   await open('naval',true);
-  await fits('.fleet-row');
+  await fits('.fleet-actions button');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),320);
   await page.setViewportSize({width:1440,height:850});
   await open('poker-italiano',true);
