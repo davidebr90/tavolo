@@ -67,6 +67,13 @@ test('Long names, turn banners and fleet controls stay inside their boxes', {
     await page.locator('.banner.red').waitFor();
     assert.ok(Math.abs((await board.boundingBox()).y-first.y)<=1,'own move preserved the board');
     assert.equal(await page.evaluate(()=>scrollY),0);
+    const current=await (await fetch(origin+'/api/rooms/'+chess,{headers:{Authorization:'Bearer '+host}})).json();
+    await post(chess,host,'/moves',{version:current.version,id:'mobile-close',action:{close:'request'}});
+    const accept=page.locator('[data-action="accept-close"]');
+    await accept.waitFor();
+    assert.ok(Math.abs((await board.boundingBox()).y-first.y)<=1,'incoming requests preserve the board');
+    const response=await accept.boundingBox();
+    assert.ok(response.y>=0&&response.y+response.height<=568,'the request can be answered without scrolling');
   });
   await open('naval',true);
   await fits('.fleet-actions button');

@@ -1532,7 +1532,7 @@ function cardTable(g) {
       return cardHints?cardCaption(face,scopa?cardFace(g.id,c).label:unoColors[c[0]],vars):face;
     }).join('')+'</div>'+
     '<div class="card-moves" data-hand-label="'+(n>6?n+' carte in mano · Scorri la mano':n+(n===1?' carta in mano':' carte in mano'))+'">'+(scopa?takeButtons(options)+(options.length?'<button type="button" class="primary compact-card-action" data-action="choose-take" aria-haspopup="dialog">Scegli la presa</button>':''):
-    (active?'<button class="outline" data-action="'+(g.drawn?'uno-pass':'uno-draw')+'">'+(g.drawn?'Passa':'Pesca')+'</button>':''))+'</div></div></div>';
+    (active?'<span class="uno-draw-choice" role="status">'+(g.drawn?'Gioca la carta pescata o passa.':n+(n===1?' carta in mano':' carte in mano'))+'</span><button class="outline" data-action="'+(g.drawn?'uno-pass':'uno-draw')+'">'+(g.drawn?'Passa':'Pesca')+'</button>':''))+'</div></div></div>';
 }
 // ---- Poker: chips and cards in motion ----
 function pokerSnapshot() {
